@@ -1,0 +1,4 @@
+{
+    "name": "send_email",
+    "description": "Send email via Gmail (args: to, subject, body)"
+}

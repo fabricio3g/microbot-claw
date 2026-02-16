@@ -1,0 +1,8 @@
+{
+    "name": "ping_host",
+    "description": "Ping a host and return latency/summary. Use for connectivity checks.",
+    "args": {
+        "host": "Hostname or IP to ping",
+        "count": "Number of pings (default 3)"
+    }
+}

@@ -1,0 +1,4 @@
+{
+    "name": "get_sys_health",
+    "description": "Get system health: CPU temp, load, RAM, disk, uptime"
+}

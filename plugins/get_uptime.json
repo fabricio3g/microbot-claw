@@ -1,0 +1,5 @@
+{
+    "name": "get_uptime",
+    "description": "Show system uptime (how long the device has been running).",
+    "args": {}
+}

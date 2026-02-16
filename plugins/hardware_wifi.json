@@ -1,0 +1,4 @@
+{
+    "name": "get_wifi_status",
+    "description": "Get WiFi interface status, signal strength, connected clients"
+}

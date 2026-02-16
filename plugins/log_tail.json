@@ -1,0 +1,8 @@
+{
+    "name": "log_tail",
+    "description": "Show last N lines of a log file (e.g. /var/log/messages or syslog).",
+    "args": {
+        "path": "Log file path (e.g. /var/log/messages)",
+        "lines": "Number of lines (default 20)"
+    }
+}

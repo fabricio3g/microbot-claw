@@ -1,0 +1,7 @@
+{
+    "name": "disk_usage",
+    "description": "Show disk usage (df). Reports free/used space per mount.",
+    "args": {
+        "path": "Optional path or mount to show (default: all)"
+    }
+}

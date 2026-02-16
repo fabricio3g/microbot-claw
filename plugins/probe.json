@@ -1,0 +1,10 @@
+{
+    "name": "set_probe",
+    "description": "Set a proactive monitoring probe (disk_check, mem_check, net_check, load_check, service_check). Runs silently on cron and only alerts user if something needs attention.",
+    "args": {
+        "cron": "Cron expression (e.g. */30 * * * * for every 30 min)",
+        "probe": "Probe name: disk_check, mem_check, net_check, load_check, service_check, custom",
+        "chat_id": "Telegram chat ID (auto-filled by agent)",
+        "id": "Optional schedule ID"
+    }
+}

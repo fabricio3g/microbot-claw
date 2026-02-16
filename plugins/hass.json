@@ -1,0 +1,4 @@
+{
+    "name": "home_assistant_control",
+    "description": "Control Home Assistant (args: service/entity_id, state check, camera snapshot)"
+}

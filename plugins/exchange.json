@@ -1,0 +1,9 @@
+{
+    "name": "get_exchange_rate",
+    "description": "Convert amount from one currency to another. Use when user asks 'how much is X in Y', 'USD to EUR', 'convert 10 dollars to pounds', etc. Decide from_currency, to_currency, amount from the user's question.",
+    "args": {
+        "from_currency": "Source currency code (default: USD)",
+        "to_currency": "Target currency code (e.g. EUR, GBP, ARS)",
+        "amount": "Amount to convert (default: 1)"
+    }
+}

@@ -1,0 +1,6 @@
+data/config.json
+data/memory/
+data/sessions/
+data/deepsearch/
+data/uploads/
+*.log

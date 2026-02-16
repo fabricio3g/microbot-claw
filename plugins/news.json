@@ -1,0 +1,13 @@
+{
+    "name": "get_news",
+    "description": "Get latest news headlines from various sources",
+    "parameters": {
+        "source": "News source: lanacion, clarin, infobae, bbc",
+        "topic": "Topic to search for (optional)"
+    },
+    "examples": [
+        "get_news lanacion",
+        "get_news {\"source\": \"bbc\"}",
+        "get_news {\"topic\": \"tecnología\"}"
+    ]
+}

@@ -1,0 +1,8 @@
+{
+    "name": "world_time",
+    "description": "Get current time by timezone or by IP. Use when user asks time in a city/country or 'what time is it there'.",
+    "args": {
+        "timezone": "Optional. IANA timezone (e.g. Europe/London, America/New_York). If omitted, uses client IP.",
+        "ip": "Optional. Use 'ip' to get time by your IP; or leave timezone empty for same."
+    }
+}

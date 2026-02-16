@@ -1,0 +1,7 @@
+{
+    "name": "dns_lookup",
+    "description": "Resolve hostname to IP (DNS lookup). Use nslookup or getent.",
+    "args": {
+        "host": "Hostname to resolve (e.g. google.com)"
+    }
+}

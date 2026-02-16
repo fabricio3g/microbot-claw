@@ -1,0 +1,7 @@
+{
+    "name": "wifi_scan",
+    "description": "Scan nearby WiFi networks. Returns SSID, signal, security. Requires iw/iwlist on OpenWrt.",
+    "args": {
+        "interface": "Optional interface (e.g. wlan0, default: first wireless)"
+    }
+}

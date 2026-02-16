@@ -1,0 +1,12 @@
+{
+  "name": "web_crawl",
+  "description": "Read-only web crawler: fetches pages, extracts links, saves combined text output",
+  "args": {
+    "url": "Start URL",
+    "max_pages": "Max pages (default: 5)",
+    "max_depth": "Max depth (default: 2)",
+    "same_domain": "true/false (default: true)",
+    "include_regex": "Optional regex to include URLs",
+    "exclude_regex": "Optional regex to exclude URLs"
+  }
+}

@@ -1,0 +1,29 @@
+#!/bin/sh /etc/rc.common
+
+START=99
+STOP=10
+
+USE_PROCD=1
+PROG=/usr/bin/micropython
+# Edit SCRIPT to match your install directory if needed
+SCRIPT=/root/microbot-claw/microbot.py
+LOGfile=/var/log/microbot.log
+
+start_service() {
+    procd_open_instance
+    procd_set_param command "$PROG" "$SCRIPT"
+    procd_set_param stdout 1 
+    procd_set_param stderr 1
+    procd_set_param respawn ${respawn_threshold:-3600} ${respawn_timeout:-5} ${respawn_retry:-5}
+    procd_close_instance
+}
+
+stop_service() {
+    # Fallback to kill if procd doesn't catch it
+    killall -9 micropython 2>/dev/null
+}
+
+restart() {
+    stop
+    start
+}

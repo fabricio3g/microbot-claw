@@ -1,0 +1,7 @@
+{
+    "name": "hacker_news_top",
+    "description": "Get top stories from Hacker News. Use when user asks for HN, tech news, or top stories.",
+    "args": {
+        "limit": "Number of stories (default 5, max 20)"
+    }
+}

@@ -1,0 +1,8 @@
+{
+    "name": "deep_search",
+    "description": "Deep web research: searches the web, scrapes top results, and combines content from multiple sources for comprehensive answers",
+    "args": {
+        "query": "Search query",
+        "max_pages": "Max pages to scrape (default: 3)"
+    }
+}

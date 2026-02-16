@@ -1,0 +1,7 @@
+{
+    "name": "wikipedia_summary",
+    "description": "Get a short Wikipedia summary for a topic. Use when user asks about a concept, person, place, or thing.",
+    "args": {
+        "query": "Topic or article title (e.g. Telegram, OpenWrt, Albert Einstein)"
+    }
+}
