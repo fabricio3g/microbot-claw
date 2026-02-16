@@ -142,7 +142,7 @@ Keep data: `./uninstall.sh --keep-data`
 
 See **skills.md** for the full reference. Summary:
 
-**Core:** `get_current_time`, `web_search`, `scrape_web`, `read_file` / `write_file` / `edit_file` / `list_dir`, `system_info`, `network_status`, `run_command`, `get_weather`, `http_request`, `download_file`, `start_research_job`, `list_services` / `restart_service`, `set_schedule` / `list_schedules` / `remove_schedule`, `save_memory`, `set_probe`, `set_timezone`.
+**Core:** `get_current_time`, `web_search`, `scrape_web`, `read_file` / `write_file` / `edit_file` / `list_dir`, `system_info`, `network_status`, `run_command`, `get_weather`, `http_request`, `download_file`,  `list_services` / `restart_service`, `set_schedule` / `list_schedules` / `remove_schedule`, `save_memory`, `set_probe`, `set_timezone`.
 
 **Plugins (plugins/*.json + *.sh):** e.g. `web_crawl`, `deep_search`, `get_news`, `get_exchange_rate`, `wikipedia_summary`, `hacker_news_top`, `ping_host`, `disk_usage`, `get_uptime`, `log_tail`, `dns_lookup`, `wifi_scan`, `get_sys_health`, etc.
 
@@ -179,8 +179,6 @@ Examples:
 - "Every day at 8am run the agent: Summarize overnight news and weather" → type `agent`, content = that prompt.
 - "Every hour run net_check and alert if down" → type `probe`, content = `net_check`.
 
-**Research worker:** Set `research_worker_enabled` to `"true"`, then restart `microbot-claw-research`.  
-**Matrix worker:** Set `matrix_worker_enabled` to `"true"`, then restart `microbot-claw-matrix`.
 
 ## Architecture
 
