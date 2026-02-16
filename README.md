@@ -1,6 +1,6 @@
 # MicroBot-Claw
 
-AI-powered Telegram bot for OpenWrt routers. MicroPython implementation with Shell tool backends. REACT agent loop with tools, scheduling (including agent/planning), web crawl, and optional research/Matrix workers.
+AI-powered Telegram bot for OpenWrt routers. MicroPython implementation with Shell tool backends. REACT agent loop with tools, scheduling (including agent/planning), web crawl
 
 ## Prerequisites
 
@@ -45,7 +45,7 @@ The installer creates four procd services and writes full paths into init.d so t
 |---------|-------------|
 | microbot-claw | Main Telegram bot (polling) |
 | microbot-claw-ui | Web config UI (port 8080) |
-| microbot-claw-research | Background research worker |
+
 | microbot-claw-matrix | Matrix channel worker |
 
 ```bash
@@ -57,11 +57,6 @@ The installer creates four procd services and writes full paths into init.d so t
 /etc/init.d/microbot-claw-ui start
 /etc/init.d/microbot-claw-ui stop
 
-/etc/init.d/microbot-claw-research start
-/etc/init.d/microbot-claw-research stop
-
-/etc/init.d/microbot-claw-matrix start
-/etc/init.d/microbot-claw-matrix stop
 
 # Check status (if start shows nothing)
 /etc/init.d/microbot-claw status
@@ -101,8 +96,7 @@ Optional:
 - **enable_selector** – `true` for low-RAM fast tool selection
 - **selector_max_tokens** – cap for selector response
 - **crawl_allow_domains** – comma list for web_crawl
-- **research_worker_enabled** – enable research worker
-- **matrix_worker_enabled** – enable Matrix worker
+
 
 Config file location: under install dir `data/config.json` (e.g. `/mnt/usb/microbot-ash/data/config.json`) or `/data/config.json` if using system data dir.
 
@@ -221,8 +215,6 @@ microbot.py (Python)
 ├── uninstall.sh       # Uninstaller
 ├── test.sh            # Test script
 ├── new_tool.sh        # Tool scaffolder
-├── research_worker.py # Background research worker
-├── matrix_worker.py   # Matrix channel worker
 ├── skills.md          # Full tools/skills reference
 └── plugins/           # Plugin modules (*.json + *.sh)
     ├── web_crawl.sh, web_crawl.json
@@ -242,7 +234,7 @@ microbot.py (Python)
 └── schedules.txt     # Scheduled tasks (cron|type|content)
 ```
 
-Init scripts are written by `install.sh` into `/etc/init.d/microbot-claw`, `microbot-claw-ui`, `microbot-claw-research`, `microbot-claw-matrix` with full paths so they work at boot.
+Init scripts are written by `install.sh` into `/etc/init.d/microbot-claw`, `microbot-claw-ui`,  with full paths so they work at boot.
 
 ## Requirements
 
@@ -268,11 +260,6 @@ Init scripts are written by `install.sh` into `/etc/init.d/microbot-claw`, `micr
 - `tool_rate_limit_burst`: burst allowance for tool calls.
 - `enabled_plugins`: list of enabled plugin IDs (plugin filenames without `.sh`/`.json`, empty = all enabled).
 - `crawl_allow_domains`: optional comma list of allowed crawl domains.
-- `research_worker_enabled`: enable background research worker.
-- `research_worker_interval`: seconds between queue checks.
-- `research_max_pages`: default max pages to research.
-- `research_max_depth`: default max depth for crawler.
-- `research_report_dir`: custom report output dir (default `/data/reports`).
 - `inbox_check_interval`: seconds between inbox checks for webhooks.
 - `webhook_token`: shared token for generic webhook.
 - `slack_bot_token`: Slack bot token for replies.
