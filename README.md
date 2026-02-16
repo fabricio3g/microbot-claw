@@ -46,7 +46,7 @@ The installer creates four procd services and writes full paths into init.d so t
 | microbot-claw | Main Telegram bot (polling) |
 | microbot-claw-ui | Web config UI (port 8080) |
 
-| microbot-claw-matrix | Matrix channel worker |
+
 
 ```bash
 # Start / stop / restart
@@ -259,14 +259,6 @@ Init scripts are written by `install.sh` into `/etc/init.d/microbot-claw`, `micr
 - `enabled_plugins`: list of enabled plugin IDs (plugin filenames without `.sh`/`.json`, empty = all enabled).
 - `crawl_allow_domains`: optional comma list of allowed crawl domains.
 - `inbox_check_interval`: seconds between inbox checks for webhooks.
-- `webhook_token`: shared token for generic webhook.
-- `slack_bot_token`: Slack bot token for replies.
-- `slack_webhook_token`: token for inbound Slack webhooks.
-- `matrix_worker_enabled`: enable Matrix polling worker.
-- `matrix_worker_interval`: seconds between Matrix polls.
-- `matrix_homeserver`: Matrix homeserver URL.
-- `matrix_access_token`: Matrix access token.
-- `matrix_room_id`: default Matrix room for replies.
 - `routing_enabled`: `"true"`/`"false"` to enable smart routing tiers.
 - `routing_long_message_chars`: length threshold for deep tier.
 - `routing_deep_keywords`: comma list of deep-tier keywords.
