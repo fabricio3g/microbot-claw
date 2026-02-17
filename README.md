@@ -29,7 +29,7 @@ cd /mnt/usb/microbot-ash
 chmod +x *.sh
 ./install.sh
 
-# 4. Open the web UI and set tg_token + LLM keys (no restart needed)
+# 4. Open the web UI and set tg_token + LLM keys (restart bot needed)
 http://ROUTER_IP:8080
 ```
 
