@@ -1,5 +1,5 @@
 #!/bin/sh
-# MicroBot Plugin: Hardware Monitoring
+# AgentWRT Plugin: Hardware Monitoring
 # Inspired by MimiClaw status sensors
 
 tool_get_sys_health() {

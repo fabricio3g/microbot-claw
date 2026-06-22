@@ -1,13 +1,13 @@
 #!/bin/sh
-# MicroBot-Claw Uninstaller (OpenWrt)
+# AgentWRT Uninstaller (OpenWrt)
 
 set -e
 
 SCRIPT_DIR="$(cd "$(dirname "$0")" 2>/dev/null && pwd)"
 [ -z "$SCRIPT_DIR" ] && SCRIPT_DIR="."
 INSTALL_DIR="$SCRIPT_DIR"
-LEGACY_DIR="/opt/microbot-ash"
-LEGACY_DIR2="/opt/microbot-claw"
+LEGACY_DIR="/opt/agentwrt-ash"
+LEGACY_DIR2="/opt/agentwrt"
 DATA_DIR="/data"
 KEEP_DATA="false"
 
@@ -16,7 +16,7 @@ if [ "$1" = "--keep-data" ]; then
 fi
 
 echo "=========================================="
-echo "  MicroBot-Claw - Uninstaller"
+echo "  AgentWRT - Uninstaller"
 echo "=========================================="
 
 # Check if running as root
@@ -34,13 +34,13 @@ stop_service() {
 }
 
 echo "[1/3] Stopping services..."
-stop_service microbot-claw
-stop_service microbot-claw-ui
-stop_service microbot-claw-research
-stop_service microbot-claw-matrix
+stop_service agentwrt
+stop_service agentwrt-ui
+stop_service agentwrt-research
+stop_service agentwrt-matrix
 # Legacy service names (old installs)
-stop_service microbot-ai
-stop_service microbot-ui
+stop_service agentwrt
+stop_service agentwrt-ui
 
 echo "[2/3] Removing files..."
 cd / || true

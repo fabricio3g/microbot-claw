@@ -1,7 +1,7 @@
 #!/bin/sh
 # Scaffold a new plugin tool
 
-echo "=== MicroBot-Claw Tool Scaffolder ==="
+echo "=== AgentWRT Tool Scaffolder ==="
 printf "Tool name (no spaces, lowercase): "
 read name
 

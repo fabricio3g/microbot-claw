@@ -1,4 +1,4 @@
-# MicroBot-Claw Skills Reference
+# AgentWRT Skills Reference
 
 This document lists all available tools (skills) for the agent. Use them via the REACT loop with:
 
@@ -21,7 +21,7 @@ This document lists all available tools (skills) for the agent. Use them via the
 | **network_status** | Network info (IP, WiFi) | — |
 | **run_command** | Run a shell command | `command` |
 | **list_services** | List init.d / procd services | — |
-| **restart_service** | Restart a service | `name` (e.g. microbot-claw) |
+| **restart_service** | Restart a service | `name` (e.g. agentwrt) |
 | **get_weather** | Get weather for a location | `location` |
 | **http_request** | HTTP request | `url`, `method`, `body` |
 | **download_file** | Download file from URL | `url`, `filename` |

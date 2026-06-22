@@ -1,5 +1,5 @@
 #!/bin/sh
-# MicroBot-Claw (Ash Shell) - OpenWrt Installer
+# AgentWRT (Ash Shell) - OpenWrt Installer
 
 set -e
 
@@ -14,8 +14,12 @@ fi
 CONFIG_FILE="${DATA_DIR}/config.json"
 
 echo "=========================================="
-echo "  MicroBot-Claw (Shell) - OpenWrt Installer"
+echo "  AgentWRT - OpenWrt Installer"
 echo "=========================================="
+echo "Optional env:"
+echo "  TELEGRAM_TOKEN=... PROVIDER=openrouter|deepseek"
+echo "  OPENROUTER_KEY=... DEEPSEEK_KEY=... UI_PASSWORD=..."
+echo ""
 
 # Check if running as root
 if [ "$(id -u)" -ne 0 ]; then
@@ -87,10 +91,13 @@ if [ ! -f "$CONFIG_FILE" ]; then
     "wifi_pass": "",
     "tg_token": "",
     "provider": "openrouter",
-    "api_key": "",
-    "model": "claude-opus-4-5",
     "openrouter_key": "",
-    "openrouter_model": "anthropic/claude-opus-4",
+    "openrouter_model": "nvidia/nemotron-3-ultra-550b-a55b:free",
+    "deepseek_key": "",
+    "deepseek_model": "deepseek-v4-flash",
+    "deepseek_base_url": "https://api.deepseek.com",
+    "deepseek_thinking": "false",
+    "deepseek_reasoning_effort": "high",
     "proxy_host": "",
     "proxy_port": "",
     "search_key": "",
@@ -100,7 +107,10 @@ if [ ! -f "$CONFIG_FILE" ]; then
     "ui_port": "8080",
     "ui_pass_salt": "",
     "ui_pass_hash": "",
-    "weather_default_location": ""
+    "weather_default_location": "",
+    "log_level": "quiet",
+    "debug_log": "false",
+    "verbose_log": "false"
 }
 EOF
     echo "Created $CONFIG_FILE"
@@ -108,26 +118,49 @@ else
     echo "[4/6] Config file already exists, keeping it"
 fi
 
-# UI password (set in Web UI on first visit)
-echo "[5/6] UI password..."
+# Apply optional environment configuration
+echo "[5/6] Applying optional config..."
+json_set_string() {
+    key="$1"; val="$2"
+    [ -z "$val" ] && return 0
+    esc_val=$(printf '%s' "$val" | sed 's/\\/\\\\/g; s/"/\\"/g')
+    esc_key=$(printf '%s' "$key" | sed 's/\\/\\\\/g; s/"/\\"/g')
+    if grep -q "\"$esc_key\"" "$CONFIG_FILE"; then
+        sed -i "s/\"$esc_key\": *\"[^\"]*\"/\"$esc_key\": \"$esc_val\"/" "$CONFIG_FILE"
+    else
+        sed -i "s/}/,\\n    \"$esc_key\": \"$esc_val\"\\n}/" "$CONFIG_FILE"
+    fi
+}
+
+json_set_string tg_token "${TELEGRAM_TOKEN:-$TG_TOKEN}"
+json_set_string provider "$PROVIDER"
+json_set_string openrouter_key "$OPENROUTER_KEY"
+json_set_string deepseek_key "$DEEPSEEK_KEY"
+json_set_string deepseek_model "${DEEPSEEK_MODEL:-}"
+json_set_string timezone "$TIMEZONE"
+
+# UI password can be set non-interactively with UI_PASSWORD=...
 UI_SALT="$(jsonfilter -i "$CONFIG_FILE" -e '@.ui_pass_salt' 2>/dev/null)"
 UI_HASH="$(jsonfilter -i "$CONFIG_FILE" -e '@.ui_pass_hash' 2>/dev/null)"
+if [ -n "$UI_PASSWORD" ] && command -v sha256sum >/dev/null 2>&1; then
+    UI_SALT="$(date +%s)$$"
+    UI_HASH="$(printf '%s' "${UI_SALT}${UI_PASSWORD}" | sha256sum | awk '{print $1}')"
+    json_set_string ui_pass_salt "$UI_SALT"
+    json_set_string ui_pass_hash "$UI_HASH"
+fi
 
 if [ -z "$UI_SALT" ] || [ -z "$UI_HASH" ]; then
     echo "UI password not set. Open the Web UI and set it there."
-else
-    chmod 600 "$CONFIG_FILE"
 fi
+chmod 600 "$CONFIG_FILE"
 
 # Create init.d services (INSTALL_DIR expanded at install so procd gets full paths)
 echo "[6/6] Creating startup services..."
 INSTALL_DIR_ESC="$(echo "$INSTALL_DIR" | sed "s/'/'\\\\''/g")"
-CMD_CLAW="cd '$INSTALL_DIR_ESC' && export MICROBOT_INSTALL_DIR='$INSTALL_DIR_ESC' && exec /usr/bin/micropython '$INSTALL_DIR_ESC/microbot.py'"
-CMD_UI="cd '$INSTALL_DIR_ESC' && export MICROBOT_INSTALL_DIR='$INSTALL_DIR_ESC' && exec /usr/bin/micropython '$INSTALL_DIR_ESC/ui_server.py'"
-CMD_RESEARCH="cd '$INSTALL_DIR_ESC' && export MICROBOT_INSTALL_DIR='$INSTALL_DIR_ESC' && exec /usr/bin/micropython '$INSTALL_DIR_ESC/research_worker.py'"
-CMD_MATRIX="cd '$INSTALL_DIR_ESC' && export MICROBOT_INSTALL_DIR='$INSTALL_DIR_ESC' && exec /usr/bin/micropython '$INSTALL_DIR_ESC/matrix_worker.py'"
+CMD_CLAW="cd '$INSTALL_DIR_ESC' && export AGENTWRT_INSTALL_DIR='$INSTALL_DIR_ESC' && exec /usr/bin/micropython '$INSTALL_DIR_ESC/agentwrt.py'"
+CMD_UI="cd '$INSTALL_DIR_ESC' && export AGENTWRT_INSTALL_DIR='$INSTALL_DIR_ESC' && exec /usr/bin/micropython '$INSTALL_DIR_ESC/ui_server.py'"
 
-cat > /etc/init.d/microbot-claw << SVCEOF
+cat > /etc/init.d/agentwrt << SVCEOF
 #!/bin/sh /etc/rc.common
 
 START=99
@@ -149,7 +182,7 @@ stop_service() {
 }
 SVCEOF
 
-cat > /etc/init.d/microbot-claw-ui << SVCEOF
+cat > /etc/init.d/agentwrt-ui << SVCEOF
 #!/bin/sh /etc/rc.common
 
 START=98
@@ -171,61 +204,13 @@ stop_service() {
 }
 SVCEOF
 
-cat > /etc/init.d/microbot-claw-research << SVCEOF
-#!/bin/sh /etc/rc.common
-
-START=97
-STOP=10
-
-USE_PROCD=1
-
-start_service() {
-    procd_open_instance
-    procd_set_param command /bin/sh -c "$CMD_RESEARCH"
-    procd_set_param stdout 1
-    procd_set_param stderr 1
-    procd_set_param respawn \${respawn_threshold:-3600} \${respawn_timeout:-5} \${respawn_retry:-5}
-    procd_close_instance
-}
-
-stop_service() {
-    killall -9 micropython 2>/dev/null
-}
-SVCEOF
-
-cat > /etc/init.d/microbot-claw-matrix << SVCEOF
-#!/bin/sh /etc/rc.common
-
-START=96
-STOP=10
-
-USE_PROCD=1
-
-start_service() {
-    procd_open_instance
-    procd_set_param command /bin/sh -c "$CMD_MATRIX"
-    procd_set_param stdout 1
-    procd_set_param stderr 1
-    procd_set_param respawn \${respawn_threshold:-3600} \${respawn_timeout:-5} \${respawn_retry:-5}
-    procd_close_instance
-}
-
-stop_service() {
-    killall -9 micropython 2>/dev/null
-}
-SVCEOF
-
-chmod +x /etc/init.d/microbot-claw /etc/init.d/microbot-claw-ui /etc/init.d/microbot-claw-research /etc/init.d/microbot-claw-matrix
-/etc/init.d/microbot-claw enable
-/etc/init.d/microbot-claw-ui enable
-/etc/init.d/microbot-claw-research enable
-/etc/init.d/microbot-claw-matrix enable
+chmod +x /etc/init.d/agentwrt /etc/init.d/agentwrt-ui
+/etc/init.d/agentwrt enable
+/etc/init.d/agentwrt-ui enable
 
 echo "Starting services..."
-/etc/init.d/microbot-claw start
-/etc/init.d/microbot-claw-ui start
-/etc/init.d/microbot-claw-research start
-/etc/init.d/microbot-claw-matrix start
+/etc/init.d/agentwrt start
+/etc/init.d/agentwrt-ui start
 
 echo ""
 echo "=========================================="
@@ -239,20 +224,20 @@ echo "  vi $DATA_DIR/config.json"
 echo ""
 echo "Required fields:"
 echo "  tg_token        - Telegram bot token from @BotFather"
-echo "  openrouter_key  - OpenRouter API key (or api_key for Anthropic)"
+echo "  provider        - openrouter or deepseek"
+echo "  openrouter_key  - OpenRouter API key (if provider=openrouter)"
+echo "  deepseek_key    - DeepSeek API key (if provider=deepseek)"
 echo ""
 echo "Commands:"
-echo "  Bot Start:   /etc/init.d/microbot-claw start"
-echo "  Bot Stop:    /etc/init.d/microbot-claw stop"
-echo "  Bot Restart: /etc/init.d/microbot-claw restart"
-echo "  UI Start:    /etc/init.d/microbot-claw-ui start"
-echo "  UI Stop:     /etc/init.d/microbot-claw-ui stop"
-echo "  Research Worker Start: /etc/init.d/microbot-claw-research start"
-echo "  Research Worker Stop:  /etc/init.d/microbot-claw-research stop"
-echo "  Check status: /etc/init.d/microbot-claw status  (or microbot-claw-ui, etc.)"
-echo "  Logs:        logread -f | grep microbot"
+echo "  Bot Start:   /etc/init.d/agentwrt start"
+echo "  Bot Stop:    /etc/init.d/agentwrt stop"
+echo "  Bot Restart: /etc/init.d/agentwrt restart"
+echo "  UI Start:    /etc/init.d/agentwrt-ui start"
+echo "  UI Stop:     /etc/init.d/agentwrt-ui stop"
+echo "  Check status: /etc/init.d/agentwrt status  (or agentwrt-ui, etc.)"
+echo "  Logs:        logread -f | grep agentwrt"
 echo ""
-echo "If start shows nothing, check: /etc/init.d/microbot-claw status"
-echo "Or run directly: cd ${INSTALL_DIR} && MICROBOT_INSTALL_DIR=${INSTALL_DIR} micropython microbot.py"
-echo "  UI directly:  cd ${INSTALL_DIR} && MICROBOT_INSTALL_DIR=${INSTALL_DIR} micropython ui_server.py"
+echo "If start shows nothing, check: /etc/init.d/agentwrt status"
+echo "Or run directly: cd ${INSTALL_DIR} && AGENTWRT_INSTALL_DIR=${INSTALL_DIR} micropython agentwrt.py"
+echo "  UI directly:  cd ${INSTALL_DIR} && AGENTWRT_INSTALL_DIR=${INSTALL_DIR} micropython ui_server.py"
 echo ""

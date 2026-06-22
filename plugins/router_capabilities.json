@@ -1,0 +1,7 @@
+{
+  "name": "router_capabilities",
+  "description": "Inspect this OpenWrt router/modem: board, memory, disk, network, WiFi, cron, MicroPython, services, open ports, and available internal tools.",
+  "args": {
+    "detail": "Optional detail level: short or full (default short)"
+  }
+}

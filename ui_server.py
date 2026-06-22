@@ -1,9 +1,9 @@
 #!/usr/bin/env python3
 """
-MicroBot-Claw UI - Minimal Web Config for OpenWrt (MicroPython-friendly)
+AgentWRT UI - Minimal Web Config for OpenWrt (MicroPython-friendly)
 """
 
-print("\n\n!!! STARTING MICROBOT-CLAW UI \n")
+print("\n\n!!! STARTING AGENTWRT UI \n")
 
 try:
     import usocket as socket
@@ -49,6 +49,10 @@ class OSPath:
 
 Path = OSPath()
 
+APP_THEME_CSS = """
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<style id="mb-theme">html{background:#e5e5e5}</style>
+"""
 
 def run_command(cmd):
     if hasattr(os, "popen"):
@@ -88,6 +92,22 @@ def mkdir_recursive(path):
                 except:
                     pass
     return Path.exists(path)
+
+
+def sh_quote(s):
+    return "'" + str(s).replace("'", "'\\''") + "'"
+
+
+def list_dir_names(path):
+    if hasattr(os, "listdir"):
+        try:
+            return os.listdir(path)
+        except:
+            pass
+    out = run_command("ls -1 " + sh_quote(path) + " 2>/dev/null")
+    if not out:
+        return []
+    return [x for x in out.split("\n") if x]
 
 
 def html_escape(s):
@@ -152,7 +172,7 @@ def get_script_dir():
     script_dir = "."
     try:
         if hasattr(os, "getenv"):
-            env_dir = os.getenv("MICROBOT_INSTALL_DIR")
+            env_dir = os.getenv("AGENTWRT_INSTALL_DIR")
             if env_dir and Path.exists(Path.join(env_dir, "config.sh")):
                 return env_dir
     except:
@@ -252,10 +272,7 @@ def list_plugins():
     script_dir = get_script_dir()
     pdir = Path.join(script_dir, "plugins")
     plugins = []
-    try:
-        files = os.listdir(pdir)
-    except:
-        files = []
+    files = list_dir_names(pdir)
     for fn in files:
         if not fn.endswith(".json"):
             continue
@@ -296,19 +313,57 @@ def check_auth(headers, config):
     return False
 
 
+def pretty_label(k):
+    names = {
+        "tg_token": "Telegram bot token",
+        "openrouter_key": "OpenRouter API key",
+        "openrouter_model": "OpenRouter model",
+        "deepseek_key": "DeepSeek API key",
+        "deepseek_model": "DeepSeek model",
+        "deepseek_base_url": "DeepSeek base URL",
+        "deepseek_thinking": "DeepSeek thinking",
+        "deepseek_reasoning_effort": "DeepSeek reasoning effort",
+        "ui_port": "UI port",
+        "http_port": "HTTP port",
+        "schedule_check_interval": "Scheduler check interval",
+        "schedule_catchup_minutes": "Missed reminder catch-up",
+        "enable_selector": "Fast tool selector",
+        "tool_allowlist": "Allowed tools",
+    }
+    if k in names:
+        return names.get(k)
+    # MicroPython on this router lacks str.title(); keep fallback simple.
+    return str(k).replace("_", " ")
+
+
+def is_secret_key(k):
+    k = str(k).lower()
+    return ("pass" in k) or ("token" in k) or k.endswith("_key") or k in ("openrouter_key", "deepseek_key", "tg_token")
+
+
 def _input_row(k, v):
     itype = "text"
-    if "pass" in k or "token" in k or k.endswith("_key"):
+    value = str(v)
+    placeholder = ""
+    if is_secret_key(k):
         itype = "password"
+        # Never send stored secrets/API keys back to the browser.
+        value = ""
+        if v:
+            placeholder = "Configured — leave blank to keep"
     return (
-        '<div class="row"><label>'
+        '<div class="row"><label><span>'
+        + html_escape(pretty_label(k))
+        + '</span><small>'
         + html_escape(k)
-        + '</label><input type="'
+        + '</small></label><input type="'
         + itype
         + '" name="'
         + html_escape(k)
         + '" value="'
-        + html_escape(v)
+        + html_escape(value)
+        + '" placeholder="'
+        + html_escape(placeholder)
         + '"></div>'
     )
 
@@ -323,9 +378,12 @@ def build_sections(config):
                 "openrouter_key",
                 "openrouter_model",
                 "openrouter_model_fallback",
-                "api_key",
-                "model",
-                "model_fallback",
+                "deepseek_key",
+                "deepseek_model",
+                "deepseek_model_fallback",
+                "deepseek_base_url",
+                "deepseek_thinking",
+                "deepseek_reasoning_effort",
                 "max_tokens",
                 "llm_max_retries",
                 "llm_retry_backoff_ms",
@@ -428,12 +486,57 @@ def build_sections(config):
             keys = adv_keys
         if not keys:
             continue
-        rows.append('<div class="section"><h2>' + html_escape(title) + "</h2>")
+        open_attr = " open" if title in ("Telegram", "LLM") else ""
+        rows.append('<details class="section"' + open_attr + "><summary>" + html_escape(title) + "</summary>")
         for k in keys:
             v = config.get(k, "")
             rows.append(_input_row(k, v))
-        rows.append("</div>")
+        rows.append("</details>")
     return "\n".join(rows)
+
+
+def dashboard_stats(config):
+    provider = str(config.get("provider", "openrouter") or "openrouter")
+    if provider == "deepseek":
+        llm_ready = bool(config.get("deepseek_key", ""))
+        model = config.get("deepseek_model", "deepseek-v4-flash")
+    else:
+        llm_ready = bool(config.get("openrouter_key", ""))
+        model = config.get("openrouter_model", "nvidia/nemotron-3-ultra-550b-a55b:free")
+
+    enabled = config.get("enabled_plugins", [])
+    if isinstance(enabled, list):
+        plugins = str(len(enabled)) if enabled else "all"
+    else:
+        plugins = "all"
+
+    tg = "ready" if config.get("tg_token", "") else "missing"
+    ui_port = str(config.get("ui_port", config.get("http_port", "8080")))
+    sched = str(config.get("schedule_check_interval", "10"))
+    tz = str(config.get("timezone", "")) or "local"
+
+    items = [
+        ("Telegram", tg, "bot token"),
+        ("LLM", "ready" if llm_ready else "missing", model),
+        ("Plugins", plugins, "enabled"),
+        ("UI", ui_port, "port"),
+        ("Scheduler", sched, "sec tick"),
+        ("TZ", tz, "timezone"),
+    ]
+
+    out = ['<div class="stat-grid">']
+    for label, value, sub in items:
+        out.append(
+            '<div class="stat"><div class="stat-label">'
+            + html_escape(label)
+            + '</div><div class="stat-value">'
+            + html_escape(value)
+            + '</div><div class="stat-sub">'
+            + html_escape(sub)
+            + '</div></div>'
+        )
+    out.append('</div>')
+    return "".join(out)
 
 
 def has_ui_password(config):
@@ -451,7 +554,17 @@ def set_ui_password(config_path, config, password):
 def http_response(body, code=200, headers=None):
     if headers is None:
         headers = {}
-    reason = "OK" if code == 200 else "Unauthorized"
+    if isinstance(body, str) and "<html" in body.lower():
+        low = body.lower()
+        if "id=\"mb-theme\"" not in low:
+            if "</head>" in low:
+                body = body.replace("</head>", APP_THEME_CSS + "</head>", 1)
+            elif "<head>" in low:
+                body = body.replace("<head>", "<head><meta name=\"viewport\" content=\"width=device-width, initial-scale=1\">" + APP_THEME_CSS, 1)
+            else:
+                body = "<html><head><meta charset=\"utf-8\"><meta name=\"viewport\" content=\"width=device-width, initial-scale=1\">" + APP_THEME_CSS + "</head>" + body.split("<html>", 1)[-1]
+    reasons = {200: "OK", 303: "See Other", 400: "Bad Request", 401: "Unauthorized", 404: "Not Found", 500: "Server Error"}
+    reason = reasons.get(code, "OK")
     hdrs = [
         "HTTP/1.1 " + str(code) + " " + reason,
         "Content-Type: text/html; charset=utf-8",
@@ -728,18 +841,14 @@ button{width:100%;padding:12px 14px;border:0;border-radius:10px;background:var(-
             if pwd and salt and hsh and sha256_hex(salt + pwd) == hsh:
                 global SESSION_TOKEN
                 SESSION_TOKEN = sha256_hex(str(time.time()) + pwd)
-                html = """
-<html><head><meta charset="utf-8"><title>OK</title>
-<style>
-:root{--bg:#f4f6fb;--card:#ffffff;--ink:#101326;--muted:#58607a;--accent:#2f6bff;--border:#e6e9f2}
-*{box-sizing:border-box}body{font-family:ui-sans-serif,system-ui,-apple-system,Segoe UI,Roboto,Helvetica,Arial,sans-serif;margin:0;background:var(--bg);color:var(--ink)}
-.wrap{max-width:520px;margin:60px auto;padding:0 16px}.card{background:var(--card);border:1px solid var(--border);border-radius:18px;padding:24px;box-shadow:0 10px 30px rgba(16,19,38,.08)}
-h1{font-size:22px;margin:0 0 12px}a{display:inline-block;margin-top:12px;color:var(--accent);text-decoration:none;font-weight:600}
-</style></head><body><div class="wrap"><div class="card">
-<h1>Logged in</h1><p>Session created.</p><a href="/">Continue</a>
-</div></div></body></html>
-"""
-                resp = http_response(html, headers={"Set-Cookie": "mb_session=" + SESSION_TOKEN + "; Path=/"})
+                resp = http_response(
+                    "",
+                    code=303,
+                    headers={
+                        "Set-Cookie": "mb_session=" + SESSION_TOKEN + "; Path=/; SameSite=Lax",
+                        "Location": "/",
+                    },
+                )
                 conn.send(resp)
                 conn.close()
                 return
@@ -774,7 +883,7 @@ button{width:100%;padding:12px 14px;border:0;border-radius:10px;background:var(-
 </style></head><body>
 <div class="wrap">
   <div class="card">
-    <h1>MicroBot-Claw</h1>
+    <h1>AgentWRT</h1>
     <form method="POST" action="/login">
       <label>Password</label>
       <input type="password" name="password" placeholder="Enter password">
@@ -931,11 +1040,7 @@ a{color:var(--accent);text-decoration:none;font-weight:600}
             conn.send(http_response("<html><body>Skill " + msg + ". <a href='/skills'>Back</a></body></html>"))
             conn.close()
             return
-        files = []
-        try:
-            files = os.listdir(skills_dir)
-        except:
-            files = []
+        files = list_dir_names(skills_dir)
         items = []
         for f in files:
             if f.endswith(".md"):
@@ -980,10 +1085,7 @@ Steps:
     # Skills usage panel
     if path == "/skills_usage":
         pdir = Path.join(get_script_dir(), "plugins")
-        try:
-            files = os.listdir(pdir)
-        except:
-            files = []
+        files = list_dir_names(pdir)
         rows = []
         for fn in files:
             if not fn.endswith(".json"):
@@ -1130,7 +1232,7 @@ a{display:inline-block;margin-top:12px;color:var(--accent);text-decoration:none;
                     pass
 
         if path == "/restart":
-            run_command("/etc/init.d/microbot-claw restart >/dev/null 2>&1")
+            run_command("/etc/init.d/agentwrt restart >/dev/null 2>&1")
             html = """
 <html><head><meta charset="utf-8"><title>Restarted</title>
 <style>
@@ -1148,6 +1250,9 @@ h1{font-size:22px;margin:0 0 12px}a{display:inline-block;margin-top:12px;color:v
 
         data = parse_qs(body)
         for k in data:
+            # Secret fields are intentionally rendered blank. Blank means keep existing value.
+            if is_secret_key(k) and str(data[k]) == "" and config.get(k, ""):
+                continue
             config[k] = data[k]
         ok = save_config(config_path, config)
         if ok:
@@ -1178,57 +1283,76 @@ h1{font-size:22px;margin:0 0 12px}a{display:inline-block;margin-top:12px;color:v
         conn.close()
         return
 
-    form = build_sections(config)
+    # Minimal authenticated home page: light enough for low-memory OpenWrt.
+    keys = [
+        "provider",
+        "tg_token",
+        "openrouter_key",
+        "openrouter_model",
+        "deepseek_key",
+        "deepseek_model",
+        "deepseek_base_url",
+        "deepseek_thinking",
+        "timezone",
+        "ui_port",
+        "http_port",
+    ]
+    rows = ""
+    for k in keys:
+        if k in config:
+            rows += _input_row(k, config.get(k, ""))
+
+    provider = html_escape(str(config.get("provider", "openrouter") or "openrouter"))
+    tg_state = "configured" if config.get("tg_token", "") else "missing"
+    if provider == "deepseek":
+        llm_key = config.get("deepseek_key", "")
+        model_val = config.get("deepseek_model", "deepseek-v4-flash")
+    else:
+        llm_key = config.get("openrouter_key", "")
+        model_val = config.get("openrouter_model", "")
+    llm_state = "configured" if llm_key else "missing"
+    model = html_escape(str(model_val or ""))
+
     html = """
-<html>
-<head>
-<meta charset="utf-8">
-<title>MicroBot-Claw Config</title>
+<html><head><meta charset="utf-8"><title>AgentWRT</title>
 <style>
-:root{--bg:#f4f6fb;--card:#ffffff;--ink:#101326;--muted:#58607a;--accent:#2f6bff;--border:#e6e9f2}
-*{box-sizing:border-box}
-body{font-family:ui-sans-serif,system-ui,-apple-system,Segoe UI,Roboto,Helvetica,Arial,sans-serif;margin:0;background:var(--bg);color:var(--ink)}
-.wrap{max-width:1100px;margin:30px auto;padding:0 16px}
-.card{background:var(--card);border:1px solid var(--border);border-radius:18px;padding:22px;box-shadow:0 10px 30px rgba(16,19,38,.08)}
-h1{font-size:22px;margin:0 0 8px}
-.row{margin:10px 0;display:flex;gap:12px;align-items:center}
-label{width:260px;font-weight:600;color:var(--muted)}
-input,select{flex:1;padding:10px 12px;border:1px solid var(--border);border-radius:10px;background:#fff;color:var(--ink)}
-button{padding:10px 14px;margin-top:12px;border:0;border-radius:10px;background:var(--accent);color:#fff;font-weight:600}
-.actions{display:flex;gap:10px;flex-wrap:wrap}
-.subtle{font-size:12px;color:var(--muted);margin:6px 0 14px}
-.section{padding:16px 0;border-top:1px solid var(--border)}
-.section h2{font-size:14px;text-transform:uppercase;letter-spacing:.12em;color:var(--muted);margin:2px 0 12px}
-.linkrow{margin-top:10px}
-a{color:var(--accent);text-decoration:none;font-weight:600}
-</style>
-</head>
-<body>
-<div class="wrap">
+:root{--bg:#f7f7f8;--panel:#fff;--ink:#111827;--muted:#6b7280;--line:#e5e7eb;--soft:#f3f4f6;--black:#0b0b0f}*{box-sizing:border-box}html{background:var(--bg)}body{margin:0;color:var(--ink);font-family:Inter,ui-sans-serif,system-ui,-apple-system,Segoe UI,Arial,sans-serif;font-size:14px;line-height:1.5}.wrap{max-width:900px;margin:0 auto;padding:32px 16px}.card{background:var(--panel);border:1px solid var(--line);border-radius:18px;padding:20px;margin:0 0 16px;box-shadow:0 1px 2px rgba(0,0,0,.03)}h1{font-size:28px;line-height:1.1;margin:0 0 6px;letter-spacing:-.04em}h2{font-size:15px;margin:0 0 14px;letter-spacing:-.01em}.muted,.note,small{color:var(--muted)}.grid{display:grid;grid-template-columns:repeat(4,1fr);gap:10px}.pill{background:var(--soft);border:1px solid var(--line);border-radius:14px;padding:12px}.label{font-size:11px;text-transform:uppercase;letter-spacing:.08em;color:var(--muted);font-weight:700}.value{font-weight:750;margin-top:2px}.row{display:grid;grid-template-columns:240px 1fr;gap:16px;align-items:center;padding:12px 0;border-top:1px solid var(--line)}.row:first-child{border-top:0}label span{display:block;font-weight:650}label small{display:block;font-family:ui-monospace,SFMono-Regular,Menlo,Consolas,monospace;font-size:11px;margin-top:2px;color:var(--muted)}input,select,textarea{width:100%%;padding:10px 12px;border:1px solid var(--line);border-radius:10px;background:#fff;color:var(--ink);outline:0}input:focus,select:focus,textarea:focus{border-color:#111;box-shadow:0 0 0 3px rgba(17,17,17,.08)}button,.btn{display:inline-flex;align-items:center;justify-content:center;border:0;border-radius:10px;background:var(--black);color:#fff;padding:10px 14px;font-weight:700;text-decoration:none;cursor:pointer}.btn{background:#fff;color:var(--ink);border:1px solid var(--line)}.btn:hover{background:var(--soft)}.actions{display:flex;gap:8px;flex-wrap:wrap;margin-top:14px}.danger{background:#27272a}.note{margin-top:12px;font-size:13px}@media(max-width:780px){.grid{grid-template-columns:1fr 1fr}.row{grid-template-columns:1fr}.wrap{padding:18px 12px}}@media(max-width:520px){.grid{grid-template-columns:1fr}}
+</style></head><body><div class="wrap">
   <div class="card">
-    <h1>MicroBot-Claw Configuration</h1>
-    <div class="subtle">Modern configuration console. Changes are applied on save.</div>
+    <h1>AgentWRT</h1>
+    <div class="muted">Configuration and service controls.</div>
+  </div>
+
+  <div class="card">
+    <h2>Status</h2>
+    <div class="grid">
+      <div class="pill"><div class="label">Telegram</div><div class="value">%s</div><small>tg_token</small></div>
+      <div class="pill"><div class="label">LLM key</div><div class="value">%s</div><small>openrouter_key / deepseek_key</small></div>
+      <div class="pill"><div class="label">Provider</div><div class="value">%s</div><small>provider</small></div>
+      <div class="pill"><div class="label">Model</div><div class="value">%s</div><small>openrouter_model / deepseek_model</small></div>
+    </div>
+  </div>
+
+  <div class="card">
+    <h2>Settings</h2>
     <form method="POST" action="/save">
       %s
-      <div class="actions">
-        <button type="submit">Save Changes</button>
-      </div>
+      <div class="actions"><button type="submit">Save settings</button></div>
     </form>
-    <div class="linkrow">
-      <a href="/plugins">Manage Plugins</a> | 
-      <a href="/memory">Memory</a> | 
-      <a href="/personality">Personality</a> | 
-      <a href="/skills">Skills</a> | 
-      <a href="/skills_usage">Skill Usage</a>
-    </div>
-    <form method="POST" action="/restart">
-      <button type="submit">Restart Bot</button>
-    </form>
+    <div class="note">Secret fields are never displayed. Leave blank to keep the existing value.</div>
   </div>
-</div>
-</body>
-</html>
-""" % form
+
+  <div class="card">
+    <h2>Actions</h2>
+    <div class="actions">
+      <a class="btn" href="/plugins">Plugins</a>
+      <a class="btn" href="/memory">Memory</a>
+      <a class="btn" href="/personality">Personality</a>
+      <form method="POST" action="/restart" style="display:inline"><button class="danger" type="submit">Restart bot</button></form>
+    </div>
+  </div>
+</div></body></html>
+""" % (html_escape(tg_state), html_escape(llm_state), provider, model, rows)
     conn.send(http_response(html))
     conn.close()
 
@@ -1263,12 +1387,22 @@ def main():
     print("UI listening on %s:%d" % (bind, port))
 
     while True:
+        conn = None
         try:
             conn, addr = s.accept()
             handle_client(conn, addr, config, config_path)
         except KeyboardInterrupt:
             break
         except Exception as e:
+            try:
+                print("UI error: " + str(e))
+            except:
+                pass
+            try:
+                if conn:
+                    conn.close()
+            except:
+                pass
             try:
                 time.sleep(0.1)
             except:

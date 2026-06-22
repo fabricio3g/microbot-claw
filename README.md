@@ -1,4 +1,4 @@
-# MicroBot-Claw
+# AgentWRT
 
 AI-powered Telegram bot for OpenWrt routers. MicroPython implementation with Shell tool backends. REACT agent loop with tools, scheduling (including agent/planning), web crawl
 
@@ -19,13 +19,13 @@ opkg install curl micropython jsonfilter openssh-server
 
 ```bash
 # 1. Copy files to router (from your local machine)
-scp -r microbot-ash root@ROUTER_IP:/mnt/usb/microbot-ash   # or /root/microbot-ash
+scp -r agentwrt-ash root@ROUTER_IP:/mnt/usb/agentwrt-ash   # or /root/agentwrt-ash
 
 # 2. SSH into router
 ssh root@ROUTER_IP
 
 # 3. Run installer (uses current directory as install dir)
-cd /mnt/usb/microbot-ash
+cd /mnt/usb/agentwrt-ash
 chmod +x *.sh
 ./install.sh
 
@@ -43,42 +43,42 @@ The installer creates four procd services and writes full paths into init.d so t
 
 | Service | Description |
 |---------|-------------|
-| microbot-claw | Main Telegram bot (polling) |
-| microbot-claw-ui | Web config UI (port 8080) |
+| agentwrt | Main Telegram bot (polling) |
+| agentwrt-ui | Web config UI (port 8080) |
 
 
 
 ```bash
 # Start / stop / restart
-/etc/init.d/microbot-claw start
-/etc/init.d/microbot-claw stop
-/etc/init.d/microbot-claw restart
+/etc/init.d/agentwrt start
+/etc/init.d/agentwrt stop
+/etc/init.d/agentwrt restart
 
-/etc/init.d/microbot-claw-ui start
-/etc/init.d/microbot-claw-ui stop
+/etc/init.d/agentwrt-ui start
+/etc/init.d/agentwrt-ui stop
 
 
 # Check status (if start shows nothing)
-/etc/init.d/microbot-claw status
-/etc/init.d/microbot-claw-ui status
+/etc/init.d/agentwrt status
+/etc/init.d/agentwrt-ui status
 
 # Logs
-logread -f | grep microbot
+logread -f | grep agentwrt
 ```
 
 ### Manual (foreground)
 
 ```bash
-cd /mnt/usb/microbot-ash   # or your install dir
-export MICROBOT_INSTALL_DIR=$(pwd)
-micropython microbot.py
+cd /mnt/usb/agentwrt-ash   # or your install dir
+export AGENTWRT_INSTALL_DIR=$(pwd)
+micropython agentwrt.py
 micropython ui_server.py
 ```
 
 ### Stopping
 
 - Foreground: `Ctrl+C`
-- Services: `killall micropython` (stops all micropython processes) or use `/etc/init.d/microbot-claw stop` etc.
+- Services: `killall micropython` (stops all micropython processes) or use `/etc/init.d/agentwrt stop` etc.
 
 ## Configuration
 
@@ -87,18 +87,18 @@ micropython ui_server.py
 Required for Telegram + LLM:
 
 - **tg_token** – Telegram bot token from @BotFather
-- **openrouter_key** (or **api_key** for Anthropic) – LLM API key
+- **openrouter_key** (or **deepseek_key** for DeepSeek) – LLM API key
 
 Optional:
 
-- **provider** – `openrouter` or `anthropic`
-- **openrouter_model** / **model** – model name
+- **provider** – `openrouter` or `deepseek`
+- **openrouter_model** / **deepseek_model** – model name
 - **enable_selector** – `true` for low-RAM fast tool selection
 - **selector_max_tokens** – cap for selector response
 - **crawl_allow_domains** – comma list for web_crawl
 
 
-Config file location: under install dir `data/config.json` (e.g. `/mnt/usb/microbot-ash/data/config.json`) or `/data/config.json` if using system data dir.
+Config file location: under install dir `data/config.json` (e.g. `/mnt/usb/agentwrt-ash/data/config.json`) or `/data/config.json` if using system data dir.
 
 ## Web UI (Recommended)
 
@@ -108,9 +108,9 @@ After install, open:
 http://ROUTER_IP:8080
 ```
 
-- Set **tg_token** and **LLM keys** (openrouter_key or api_key); the bot picks them up without restart.
+- Set **tg_token** and **LLM keys** (openrouter_key or deepseek_key); the bot picks them up without restart.
 - Set a UI password on first visit (stored as salted hash: `ui_pass_salt` + `ui_pass_hash`).
-- Use **Restart Bot** to restart the microbot-claw service.
+- Use **Restart Bot** to restart the agentwrt service.
 - Use `/plugins` to enable/disable plugins; `/memory`, `/personality`, `/skills`, `/skills_usage` for memory, persona, and skills.
 - Webhooks: `/webhook/generic?token=WEBHOOK_TOKEN`, `/webhook/slack?token=SLACK_WEBHOOK_TOKEN`.
 
@@ -119,7 +119,7 @@ http://ROUTER_IP:8080
 From your install directory:
 
 ```bash
-cd /mnt/usb/microbot-ash   # or your install dir
+cd /mnt/usb/agentwrt-ash   # or your install dir
 ./uninstall.sh
 ```
 
@@ -129,7 +129,7 @@ Keep data: `./uninstall.sh --keep-data`
 
 - **Telegram**: @BotFather on Telegram → `/newbot`
 - **OpenRouter**: https://openrouter.ai/keys (works with Claude, GPT-4, Gemini, Llama)
-- **Anthropic**: https://console.anthropic.com/ (Claude only)
+- **DeepSeek**: https://platform.deepseek.com/api_keys
 
 ## Bot Commands
 
@@ -183,7 +183,7 @@ Examples:
 ## Architecture
 
 ```
-microbot.py (Python)
+agentwrt.py (Python)
     │
     ├── LLMClient ────► OpenRouter / Anthropic API
     │
@@ -203,8 +203,8 @@ microbot.py (Python)
 ## Files
 
 ```
-<install_dir>/  (e.g. /mnt/usb/microbot-ash or /root/microbot-ash)
-├── microbot.py        # Main bot (MicroPython)
+<install_dir>/  (e.g. /mnt/usb/agentwrt-ash or /root/agentwrt-ash)
+├── agentwrt.py        # Main bot (MicroPython)
 ├── ui_server.py       # Web UI
 ├── config.sh          # Config loader
 ├── tools.sh           # Tool functions (shell)
@@ -232,7 +232,7 @@ microbot.py (Python)
 └── schedules.txt     # Scheduled tasks (cron|type|content)
 ```
 
-Init scripts are written by `install.sh` into `/etc/init.d/microbot-claw`, `microbot-claw-ui`,  with full paths so they work at boot.
+Init scripts are written by `install.sh` into `/etc/init.d/agentwrt`, `agentwrt-ui`,  with full paths so they work at boot.
 
 ## Requirements
 
@@ -277,8 +277,8 @@ Init scripts are written by `install.sh` into `/etc/init.d/microbot-claw`, `micr
 ./test.sh
 
 # Check service status (if start shows nothing)
-/etc/init.d/microbot-claw status
-/etc/init.d/microbot-claw-ui status
+/etc/init.d/agentwrt status
+/etc/init.d/agentwrt-ui status
 
 # Scheduler: use list_schedules tool; optional log: schedule_log=true, /data/logs/scheduler.log
 
@@ -286,8 +286,8 @@ Init scripts are written by `install.sh` into `/etc/init.d/microbot-claw`, `micr
 curl -k -s "https://api.telegram.org/botYOUR_TOKEN/getMe"
 
 # Run manually for debugging (from install dir)
-cd /mnt/usb/microbot-ash && MICROBOT_INSTALL_DIR=$(pwd) micropython microbot.py
-cd /mnt/usb/microbot-ash && MICROBOT_INSTALL_DIR=$(pwd) micropython ui_server.py
+cd /mnt/usb/agentwrt-ash && AGENTWRT_INSTALL_DIR=$(pwd) micropython agentwrt.py
+cd /mnt/usb/agentwrt-ash && AGENTWRT_INSTALL_DIR=$(pwd) micropython ui_server.py
 ```
 
 ## License

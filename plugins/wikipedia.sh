@@ -23,9 +23,9 @@ tool_wikipedia_summary() {
 
     local result
     if command -v curl >/dev/null 2>&1; then
-        result=$(curl -k -s -L -m 10 -H "User-Agent: MicroBot/1.0" "$url")
+        result=$(curl -k -s -L -m 10 -H "User-Agent: AgentWRT/1.0" "$url")
     else
-        result=$(wget -q -O - --no-check-certificate -U "MicroBot/1.0" "$url" 2>/dev/null)
+        result=$(wget -q -O - --no-check-certificate -U "AgentWRT/1.0" "$url" 2>/dev/null)
     fi
 
     if [ -z "$result" ]; then

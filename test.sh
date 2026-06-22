@@ -1,8 +1,8 @@
 #!/bin/sh
-# MicroBot AI - Setup Test
+# AgentWRT - Setup Test
 
 echo "========================================"
-echo "  MicroBot AI Setup Test"
+echo "  AgentWRT Setup Test"
 echo "========================================"
 echo ""
 
@@ -121,7 +121,7 @@ echo ""
 
 # Summary
 if [ $commands_ok -eq 1 ] && [ -n "$tg_token" ] && [ -n "$or_key" ]; then
-    echo "✓ All checks passed! Run: ./microbot.sh"
+    echo "✓ All checks passed! Run: ./agentwrt.py"
 else
     echo "✗ Fix the issues above before starting"
 fi

@@ -1,5 +1,5 @@
 #!/bin/sh
-# MicroBot Plugin: Deep Search
+# AgentWRT Plugin: Deep Search
 # Chains: web_search -> scrape top results -> combine into summary
 # All streaming via curl | awk pipelines. No temp files on disk.
 
@@ -10,7 +10,7 @@ tool_deep_search() {
     local max_pages=3
     local save_enabled="${DEEP_SEARCH_SAVE:-true}"
     local save_keep="${DEEP_SEARCH_KEEP:-false}"
-    local save_dir="${DEEP_SEARCH_SAVE_DIR:-/tmp/microbot}"
+    local save_dir="${DEEP_SEARCH_SAVE_DIR:-/tmp/agentwrt}"
     local out_file=""
 
     # Parse JSON args

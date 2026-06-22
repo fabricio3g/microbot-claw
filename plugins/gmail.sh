@@ -40,7 +40,7 @@ tool_send_email() {
     
     # Construct email temp file
     local mail_file="/tmp/mail_$$.txt"
-    echo "From: \"MicroBot\" <$user>" > "$mail_file"
+    echo "From: \"AgentWRT\" <$user>" > "$mail_file"
     echo "To: <$to>" >> "$mail_file"
     echo "Subject: $subject" >> "$mail_file"
     echo "" >> "$mail_file" # Header separator

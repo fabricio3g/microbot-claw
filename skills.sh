@@ -1,5 +1,5 @@
 #!/bin/sh
-# MicroBot AI - Skill System
+# AgentWRT - Skill System
 # Pure shell skill loader. Reads JSON metadata from plugins/*.json
 # and generates tool lists + prompt fragments for the LLM.
 #

@@ -1,1 +1,1 @@
-# Core package for MicroBot-Claw
+# Core package for AgentWRT

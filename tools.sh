@@ -1,5 +1,5 @@
 #!/bin/sh
-# MicroBot-Claw - Tools
+# AgentWRT - Tools
 # Do not source config.sh here - it's sourced by main script
 
 # Tool: Get current time
@@ -15,15 +15,20 @@ tool_get_time() {
     
     if command -v curl >/dev/null 2>&1; then
         if [ -n "$tz_arg" ]; then
-            result=$(curl -k -s "http://worldtimeapi.org/api/timezone/${tz_arg}")
+            result=$(curl -k -s --connect-timeout 5 -m 8 "https://timeapi.io/api/TimeZone/zone?timeZone=${tz_arg}")
+            if echo "$result" | grep -q 'currentLocalTime'; then
+                datetime=$(echo "$result" | jsonfilter -e '@.currentLocalTime' 2>/dev/null)
+                [ -n "$datetime" ] && { echo "Current time: ${datetime} (timezone: ${tz_arg})"; return; }
+            fi
+            result=$(curl -k -s --connect-timeout 5 -m 8 "https://worldtimeapi.org/api/timezone/${tz_arg}")
         else
-            result=$(curl -k -s "http://worldtimeapi.org/api/ip")
+            result=$(curl -k -s --connect-timeout 5 -m 8 "https://worldtimeapi.org/api/ip")
         fi
     else
         if [ -n "$tz_arg" ]; then
-             result=$(wget -q -O - --no-check-certificate "http://worldtimeapi.org/api/timezone/${tz_arg}" 2>/dev/null)
+             result=$(wget -q -O - --no-check-certificate "https://worldtimeapi.org/api/timezone/${tz_arg}" 2>/dev/null)
         else
-             result=$(wget -q -O - --no-check-certificate "http://worldtimeapi.org/api/ip" 2>/dev/null)
+             result=$(wget -q -O - --no-check-certificate "https://worldtimeapi.org/api/ip" 2>/dev/null)
         fi
     fi
     
@@ -46,8 +51,26 @@ tool_set_timezone() {
     local tz="$1"
     
     if [ -z "$tz" ]; then
-        echo "Error: Timezone required (e.g. 'America/New_York' or 'Europe/London')"
+        echo "Error: Timezone required. Examples: Europe/Madrid, America/Argentina/Buenos_Aires, UTC"
         return
+    fi
+    case "$tz" in
+        Madrid|madrid|Spain|spain|Espana|España) tz="Europe/Madrid" ;;
+        Argentina|argentina|Buenos_Aires|buenos_aires) tz="America/Argentina/Buenos_Aires" ;;
+        Mexico|mexico|México|méxico) tz="America/Mexico_City" ;;
+        Colombia|colombia|Bogota|Bogotá|bogota|bogotá) tz="America/Bogota" ;;
+        Chile|chile) tz="America/Santiago" ;;
+        Peru|peru|Perú|perú) tz="America/Lima" ;;
+    esac
+    case "$tz" in
+        *..*|/*|*\ *|*\;*|*\&*|*\|*|*\`*|*\$*) echo "Error: Invalid timezone"; return ;;
+    esac
+    if [ "$tz" != "UTC" ] && ! echo "$tz" | grep -q '/'; then
+        echo "Error: Use an IANA timezone like Europe/Madrid or America/Argentina/Buenos_Aires"
+        return
+    fi
+    if [ -d /usr/share/zoneinfo ] && [ "$tz" != "UTC" ] && [ ! -e "/usr/share/zoneinfo/$tz" ]; then
+        echo "Warning: timezone not found in zoneinfo, saving anyway: $tz"
     fi
     
     # Update config.json
@@ -74,7 +97,23 @@ tool_set_timezone() {
         fi
     fi
     
-    echo "Timezone set to '$tz'. Restart bot to apply fully."
+    if [ -n "$tz" ]; then
+        now=""
+        api_resp=$(curl -k -s --connect-timeout 5 -m 8 "https://timeapi.io/api/TimeZone/zone?timeZone=${tz}" 2>/dev/null)
+        if [ -n "$api_resp" ]; then
+            now=$(echo "$api_resp" | jsonfilter -e '@.currentLocalTime' 2>/dev/null)
+        fi
+        if [ -z "$now" ]; then
+            api_resp=$(curl -k -s --connect-timeout 5 -m 8 "https://worldtimeapi.org/api/timezone/${tz}" 2>/dev/null)
+            [ -n "$api_resp" ] && now=$(echo "$api_resp" | jsonfilter -e '@.datetime' 2>/dev/null)
+        fi
+        if [ -z "$now" ]; then
+            now=$(TZ="$tz" date "+%Y-%m-%d %H:%M:%S %Z" 2>/dev/null)
+        fi
+        echo "Timezone updated: $tz"
+        [ -n "$now" ] && echo "Current time: $now"
+        echo "Config saved: $config_file"
+    fi
 }
 
 # Helper: JSON Escape
@@ -87,6 +126,15 @@ json_escape() {
     # Note: awk might be missing on minimal systems, use printf + sed
     local tab=$(printf '\t')
     printf '%s' "$1" | sed 's/\\/\\\\/g' | sed 's/"/\\"/g' | sed "s/$tab/\\\\t/g" | tr '\n' ' ' | sed 's/  */ /g'
+}
+
+# Helper: clean HTML snippets for Telegram/LLM
+_clean_search_text() {
+    printf '%s' "$1" \
+      | sed 's/<[^>][^>]*>//g' \
+      | sed 's/&amp;/\&/g; s/&lt;/</g; s/&gt;/>/g; s/&quot;/"/g; s/&#39;/'"'"'/g; s/&#x27;/'"'"'/g; s/&#x2F;/\//g; s/&nbsp;/ /g' \
+      | tr '\n\r\t' '   ' \
+      | sed 's/  */ /g; s/^ *//; s/ *$//'
 }
 
 # Tool: Web search
@@ -104,9 +152,9 @@ tool_web_search() {
     
     # ------- Try Brave API first -------
     if [ -n "$SEARCH_KEY" ] && [ "$SEARCH_KEY" != "YOUR_API_KEY" ]; then
-        local api_url="https://api.search.brave.com/res/v1/web/search?q=${encoded_q}&count=8"
+        local api_url="https://api.search.brave.com/res/v1/web/search?q=${encoded_q}&count=5&freshness=pd"
         local result
-        result=$(curl -k -s -m 10 \
+        result=$(curl -k -s --connect-timeout 4 -m 7 \
             -H "Accept: application/json" \
             -H "X-Subscription-Token: ${SEARCH_KEY}" \
             "$api_url")
@@ -117,11 +165,16 @@ tool_web_search() {
             local seen="|"
             echo "=== Search Results for: $query ==="
             echo ""
-            while [ $i -lt 20 ] && [ $shown -lt 8 ]; do
+            while [ $i -lt 10 ] && [ $shown -lt 5 ]; do
                 local title=$(echo "$result" | jsonfilter -e "@.web.results[$i].title" 2>/dev/null)
                 local link=$(echo "$result" | jsonfilter -e "@.web.results[$i].url" 2>/dev/null)
                 local desc=$(echo "$result" | jsonfilter -e "@.web.results[$i].description" 2>/dev/null)
                 [ -z "$link" ] && break
+                case "$link" in
+                    *duckduckgo.com/y.js*|*bing.com/aclick*|*googleadservices*|*doubleclick.net*) i=$((i + 1)); continue ;;
+                esac
+                title=$(_clean_search_text "$title")
+                desc=$(_clean_search_text "$desc")
                 if ! echo "$seen" | grep -q "|$link|"; then
                     seen="${seen}${link}|"
                     shown=$((shown + 1))
@@ -143,7 +196,7 @@ tool_web_search() {
     echo ""
     
     # Single curl | awk pipeline: extract links only (clean output)
-    curl -k -s -L -A "$ua" -m 15 "$ddg_url" 2>/dev/null | awk '
+    curl -k -s -L -A "$ua" --connect-timeout 4 -m 8 "$ddg_url" 2>/dev/null | awk '
     BEGIN { lc=0; tc=0 }
     {
         # Extract uddg= links
@@ -158,8 +211,8 @@ tool_web_search() {
                 gsub(/%3A/, ":", url); gsub(/%2F/, "/", url)
                 gsub(/%3F/, "?", url); gsub(/%3D/, "=", url)
                 gsub(/%26/, "\\&", url); gsub(/%2C/, ",", url)
-                gsub(/%20/, " ", url); gsub(/%25/, "%", url)
-                if (lc < 8) { links[lc++] = url }
+                gsub(/%20/, " ", url); gsub(/%2D/, "-", url); gsub(/%25/, "%", url)
+                if (url !~ /duckduckgo\.com\/y\.js/ && url !~ /bing\.com\/aclick/ && url !~ /googleadservices/ && url !~ /doubleclick\.net/ && !(url in seen) && lc < 5) { seen[url]=1; links[lc++] = url }
             }
         }
     }
@@ -269,79 +322,86 @@ tool_scrape_web() {
     }'
 }
 
+# Sandbox directory for LLM file operations
+SANDBOX_DIR="${DATA_DIR}/sandbox"
+mkdir -p "$SANDBOX_DIR" 2>/dev/null
+
+# Sandbox path check (blocks .. and symlink escapes)
+is_sandboxed() {
+    local target="$1"
+    [ -z "$target" ] && return 1
+    case "$target" in
+        *".."*) return 1 ;;
+    esac
+    case "$target" in
+        "${SANDBOX_DIR}"/*|"${SANDBOX_DIR}") return 0 ;;
+        *) return 1 ;;
+    esac
+}
+
 # Tool: Read file
 tool_read_file() {
     local path="$1"
-    
-    # Check if path starts with DATA_DIR
-    case "$path" in
-        "${DATA_DIR}"*) ;;
-        *)
-            echo "Error: Path must start with ${DATA_DIR}"
-            return
-            ;;
-    esac
-    
+    if ! is_sandboxed "$path"; then
+        echo "Error: Path must be inside sandbox: ${SANDBOX_DIR}"
+        return
+    fi
     if [ ! -f "$path" ]; then
         echo "Error: File not found: $path"
         return
     fi
-    
     cat "$path"
 }
 
-# Tool: Write file
+# Tool: Write file (max 50KB, no shell scripts)
 tool_write_file() {
     local path="$1"
     local content="$2"
-    
-    case "$path" in
-        "${DATA_DIR}"*) ;;
-        *)
-            echo "Error: Path must start with ${DATA_DIR}"
-            return
-            ;;
+    if ! is_sandboxed "$path"; then
+        echo "Error: Path must be inside sandbox: ${SANDBOX_DIR}"
+        return
+    fi
+    if [ "${#content}" -gt 50000 ]; then
+        echo "Error: Content too large (max 50KB)"
+        return
+    fi
+    case "$content" in
+        *'#!/bin/'*|*'#!/usr/'*) echo "Error: Shell scripts not allowed in file content"; return ;;
     esac
-    
     mkdir -p "$(dirname "$path")"
     echo "$content" > "$path"
-    echo "File written successfully: $path"
+    echo "File written: $path"
 }
 
-# Tool: Edit file (find and replace)
+# Tool: Edit file (find and replace, max 50KB)
 tool_edit_file() {
     local path="$1"
     local old_str="$2"
     local new_str="$3"
-    
-    case "$path" in
-        "${DATA_DIR}"*) ;;
-        *)
-            echo "Error: Path must start with ${DATA_DIR}"
-            return
-            ;;
-    esac
-    
+    if ! is_sandboxed "$path"; then
+        echo "Error: Path must be inside sandbox: ${SANDBOX_DIR}"
+        return
+    fi
     if [ ! -f "$path" ]; then
         echo "Error: File not found: $path"
         return
     fi
-    
+    if [ "$(wc -c < "$path" 2>/dev/null)" -gt 50000 ]; then
+        echo "Error: File too large (max 50KB)"
+        return
+    fi
+    [ -z "$old_str" ] && { echo "Error: old_string required"; return; }
     sed -i "s/${old_str}/${new_str}/" "$path"
-    echo "File edited successfully: $path"
+    echo "File edited: $path"
 }
 
-# Tool: List directory
+# Tool: List directory (sandbox only)
 tool_list_dir() {
-    local prefix="${1:-${DATA_DIR}}"
-    
-    case "$prefix" in
-        "${DATA_DIR}"*) ;;
-        *)
-            prefix="${DATA_DIR}"
-            ;;
-    esac
-    
+    local prefix="${1:-${SANDBOX_DIR}}"
+    if ! is_sandboxed "$prefix"; then
+        prefix="${SANDBOX_DIR}"
+    fi
+    echo "Listing: $prefix"
     find "$prefix" -type f 2>/dev/null | head -50
 }
 
@@ -410,33 +470,48 @@ tool_network_status() {
     ip neigh show 2>/dev/null | grep -v FAILED | head -10
 }
 
-# Tool: Run shell command
+# Tool: Run shell command (hardcoded safety blocklist)
 tool_run_command() {
     local cmd="$1"
-    
-    # Blocked commands and sensitive files for safety
-    case "$cmd" in
-        *"rm -rf /"*|*"mkfs"*|*"dd if="*|*"chmod 777 /"*|*" > /etc/passwd"*|*" > /etc/shadow"*|*"config.json"*|*"tg_token"*|*"openrouter_key"*|*"api_key"*)
-            echo "Error: Command blocked for safety. Access to configuration or sensitive keys is forbidden."
-            return
-            ;;
+    local low
+    low=$(echo "$cmd" | tr '[:upper:]' '[:lower:]')
+
+    # Hardcoded blocklist - destructive, exfiltration, privilege escalation, injection
+    case "$low" in
+        # Destructive
+        *"rm -rf"*|*"mkfs"*|*"dd if="*|*"fdisk"*|*"format"*)
+            echo "Error: Destructive command blocked."; return ;;
+        # Exfiltration
+        *"curl"*|*"wget"*)
+            case "$low" in
+                *"/tmp/"*|*"/var/"*|*"./"*|*"-o /"*|*"-O /"*|*">> /"*)
+                    echo "Error: File download blocked in run_command. Use download_file or http_request instead."; return ;;
+            esac ;;
+        # Privilege / config tampering
+        *"chmod 777"*|*"chmod 666"*|*"chown"*|*"> /etc/"*|*">>/etc/"*|*"passwd"*|*"shadow"*|*"sudo"*|*"su -"*)
+            echo "Error: Privilege escalation or config tampering blocked."; return ;;
+        # Config/key exfiltration
+        *"config.json"*|*"tg_token"*|*"openrouter_key"*|*"api_key"*|*"ui_pass"*)
+            echo "Error: Access to credentials blocked."; return ;;
+        # Reverse shell / injection
+        *"nc -e"*|*"ncat -e"*|*"bash -i"*|*"sh -i"*|*"exec("*|*"eval("*|*"__import__"*|*"subprocess"*|*"os.system"*)
+            echo "Error: Shell injection blocked."; return ;;
+        # Backticks / subshell injection
+        *'`'*|*'$('*)
+            echo "Error: Subshell injection blocked."; return ;;
     esac
-    
-    # Run command with timeout if available
+    # Max command length
+    if [ "${#cmd}" -gt 500 ]; then
+        echo "Error: Command too long (max 500 chars)."
+        return
+    fi
     local result=""
-    local exit_code=0
     if command -v timeout >/dev/null 2>&1; then
         result=$(timeout 10 sh -c "$cmd" 2>&1)
-        exit_code=$?
-        if [ $exit_code -eq 124 ]; then
-            echo "Error: Command timed out (10s limit)"
-            return
-        fi
+        [ $? -eq 124 ] && { echo "Error: Command timed out (10s)"; return; }
     else
         result=$(sh -c "$cmd" 2>&1)
-        exit_code=$?
     fi
-    
     echo "$result"
 }
 
@@ -445,7 +520,7 @@ tool_restart_service() {
     local service="$1"
     
     # Only allow specific services
-    local allowed="firewall network dnsmasq uhttpd dropbear microbot-claw microbot-claw-ui microbot-ai microbot-ui odhcpd log"
+    local allowed="firewall network dnsmasq uhttpd dropbear agentwrt agentwrt-ui odhcpd log"
     
     if ! echo "$allowed" | grep -qw "$service"; then
         echo "Error: Can only restart: $allowed"
@@ -720,177 +795,6 @@ offset_to_cron() {
     esac
 }
 
-# Check if current time matches a cron expression
-matches_cron() {
-    local expr="$1"
-    set -- $expr
-    [ $# -ne 5 ] && return 1
-
-    local f_min="$1" f_hour="$2" f_dom="$3" f_mon="$4" f_dow="$5"
-    local now_min now_hour now_dom now_mon now_dow
-
-    if [ -n "$TIMEZONE" ]; then
-        now_min=$(TZ="$TIMEZONE" date +%M 2>/dev/null)
-        now_hour=$(TZ="$TIMEZONE" date +%H 2>/dev/null)
-        now_dom=$(TZ="$TIMEZONE" date +%d 2>/dev/null)
-        now_mon=$(TZ="$TIMEZONE" date +%m 2>/dev/null)
-        now_dow=$(TZ="$TIMEZONE" date +%w 2>/dev/null)
-    else
-        now_min=$(date +%M 2>/dev/null)
-        now_hour=$(date +%H 2>/dev/null)
-        now_dom=$(date +%d 2>/dev/null)
-        now_mon=$(date +%m 2>/dev/null)
-        now_dow=$(date +%w 2>/dev/null)
-    fi
-
-    # Normalize to integers (avoid octal)
-    now_min=$((10#$now_min))
-    now_hour=$((10#$now_hour))
-    now_dom=$((10#$now_dom))
-    now_mon=$((10#$now_mon))
-    now_dow=$((10#$now_dow))
-
-    _match_field() {
-        local f="$1" v="$2" is_dow="$3"
-        [ -z "$f" ] && return 1
-        [ "$f" = "*" ] && return 0
-
-        # Comma-separated list
-        if echo "$f" | grep -q ","; then
-            local part
-            for part in $(echo "$f" | tr ',' ' '); do
-                _match_field "$part" "$v" "$is_dow" && return 0
-            done
-            return 1
-        fi
-
-        # Step
-        local step=1 base="$f"
-        if echo "$f" | grep -q "/"; then
-            base="${f%/*}"
-            step="${f#*/}"
-            [ -z "$step" ] && step=1
-        fi
-
-        if [ "$base" = "*" ]; then
-            [ $((v % step)) -eq 0 ] && return 0 || return 1
-        fi
-
-        local start end
-        if echo "$base" | grep -q "-"; then
-            start="${base%-*}"
-            end="${base#*-}"
-        else
-            start="$base"
-            end="$base"
-        fi
-
-        if [ "$is_dow" = "1" ]; then
-            [ "$start" = "7" ] && start=0
-            [ "$end" = "7" ] && end=0
-        fi
-
-        start=$((10#$start))
-        end=$((10#$end))
-
-        if [ "$start" -le "$end" ]; then
-            [ "$v" -lt "$start" ] && return 1
-            [ "$v" -gt "$end" ] && return 1
-            [ $(( (v - start) % step )) -eq 0 ]
-            return $?
-        fi
-
-        # Wrap-around range
-        if [ "$v" -ge "$start" ] || [ "$v" -le "$end" ]; then
-            # For wrap ranges, accept any value in range (step ignored for simplicity)
-            return 0
-        fi
-        return 1
-    }
-
-    _match_field "$f_min"  "$now_min"  "0" || return 1
-    _match_field "$f_hour" "$now_hour" "0" || return 1
-    _match_field "$f_dom"  "$now_dom"  "0" || return 1
-    _match_field "$f_mon"  "$now_mon"  "0" || return 1
-    _match_field "$f_dow"  "$now_dow"  "1" || return 1
-    return 0
-}
-
-check_schedules() {
-    [ ! -f "$SCHED_FILE" ] && return
-
-    local tmp="/tmp/.sch_$$"
-    : > "$tmp" 2>/dev/null
-
-    while IFS= read -r line; do
-        [ -z "$line" ] && continue
-
-        local sid cron chat stype content
-        sid=$(echo "$line" | cut -d'|' -f1)
-        cron=$(echo "$line" | cut -d'|' -f2)
-        chat=$(echo "$line" | cut -d'|' -f3)
-        stype=$(echo "$line" | cut -d'|' -f4)
-        content=$(echo "$line" | cut -d'|' -f5-)
-
-        [ -z "$sid" ] && continue
-        [ -z "$cron" ] && { echo "$line" >> "$tmp"; continue; }
-
-        local keep="true"
-
-        if matches_cron "$cron"; then
-            case "$stype" in
-                ""|msg*|reminder*)
-                    tg_send_message "$chat" "$content"
-                    ;;
-                cmd*|once_cmd*)
-                    local result
-                    result=$(tool_run_command "$content")
-                    tg_send_message "$chat" "$result"
-                    [ "$stype" = "once_cmd" ] && keep="false"
-                    ;;
-                tool*|once_tool*|probe*)
-                    local tname targs
-                    if echo "$content" | grep -q "|"; then
-                        tname="${content%%|*}"
-                        targs="${content#*|}"
-                    else
-                        tname=$(echo "$content" | awk '{print $1}')
-                        targs=$(echo "$content" | sed "s/^${tname}[[:space:]]*//")
-                    fi
-                    local fn="tool_${tname}"
-                    local result=""
-                    if [ -n "$tname" ] && type "$fn" >/dev/null 2>&1; then
-                        result=$($fn "$targs")
-                    else
-                        result="Error: Tool not found: $tname"
-                    fi
-
-                    if [ "$stype" = "probe" ]; then
-                        if echo "$result" | grep -q "NET_DOWN"; then
-                            tg_send_message "$chat" "$result"
-                        fi
-                    else
-                        tg_send_message "$chat" "$result"
-                    fi
-
-                    [ "$stype" = "once_tool" ] && keep="false"
-                    ;;
-                once*)
-                    tg_send_message "$chat" "$content"
-                    keep="false"
-                    ;;
-                *)
-                    tg_send_message "$chat" "$content"
-                    ;;
-            esac
-        fi
-
-        [ "$keep" = "true" ] && echo "$line" >> "$tmp"
-    done < "$SCHED_FILE"
-
-    mv "$tmp" "$SCHED_FILE" 2>/dev/null
-}
-
 tool_set_schedule() {
     local cron="$1"
     local content="$2"
@@ -1063,3 +967,43 @@ if [ -d "$PLUGIN_DIR" ]; then
         fi
     done
 fi
+
+# Tool: Security status report
+tool_security_status() {
+    local json_args="$1"
+
+    echo "=== Security Guardrails (hardcoded) ==="
+    echo ""
+    echo "-- File operations --"
+    echo "Sandbox dir: ${SANDBOX_DIR}"
+    echo "Allowed: read_file, write_file, edit_file, list_dir"
+    echo "Blocked: path traversal (..), paths outside sandbox"
+    echo ""
+    echo "-- Command execution --"
+    echo "run_command: hardcoded regex blocklist"
+    echo "Blocks: rm -rf, mkfs, dd, fdisk, sudo, chmod 777, subshells,"
+    echo "         eval, exfiltration, /etc access, etc."
+    echo "Max length: 500 chars, no newlines, no pipe-to-network"
+    echo ""
+    echo "-- Web tools --"
+    echo "URL allowlist: http(s) only"
+    echo "SSRF prevention: blocks localhost, 10.x, 172.16-31.x, 192.168.x,"
+    echo "                 127.x, 169.254.x, link-local, RFC1918"
+    echo "Blocks: file://, gopher://, dict://, ftp://, ldap://"
+    echo ""
+    echo "-- Prompt injection --"
+    echo "Blocks: ignore-previous, disregard, forget-everything,"
+    echo "         you-are-now, system:, assistant:, <|...|>,"
+    echo "         role markers, jailbreak, DAN mode"
+    echo ""
+    echo "-- Output sanitization --"
+    echo "Strips: ANSI escapes, tokens (8-12 digit:30+ chars),"
+    echo "        sk-* keys, AWS keys, base64 blobs, prompt markers"
+    echo ""
+    echo "-- File size limits --"
+    echo "write_file: max 50KB content"
+    echo "edit_file: max 50KB existing file"
+    echo ""
+    echo "All guardrails are hardcoded in agentwrt.py execute_tool()."
+    echo "No config file can disable them."
+}

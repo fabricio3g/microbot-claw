@@ -1,5 +1,5 @@
 #!/bin/sh
-# MicroBot-Claw - Configuration for OpenWrt
+# AgentWRT - Configuration for OpenWrt
 
 
 # Determine data directory (prefer local ./data if present)
@@ -18,10 +18,10 @@ WIFI_SSID=""
 WIFI_PASS=""
 TG_TOKEN=""
 PROVIDER="openrouter"
-API_KEY=""
-MODEL="claude-opus-4-5"
 OPENROUTER_KEY=""
-OPENROUTER_MODEL="anthropic/claude-opus-4"
+OPENROUTER_MODEL="nvidia/nemotron-3-ultra-550b-a55b:free"
+DEEPSEEK_KEY=""
+DEEPSEEK_MODEL="deepseek-v4-flash"
 PROXY_HOST=""
 PROXY_PORT=""
 SEARCH_KEY=""
@@ -60,10 +60,13 @@ load_config() {
     "wifi_pass": "",
     "tg_token": "",
     "provider": "openrouter",
-    "api_key": "",
-    "model": "claude-opus-4-5",
     "openrouter_key": "",
-    "openrouter_model": "anthropic/claude-opus-4",
+    "openrouter_model": "nvidia/nemotron-3-ultra-550b-a55b:free",
+    "deepseek_key": "",
+    "deepseek_model": "deepseek-v4-flash",
+    "deepseek_base_url": "https://api.deepseek.com",
+    "deepseek_thinking": "false",
+    "deepseek_reasoning_effort": "high",
     "proxy_host": "",
     "proxy_port": "",
     "search_key": "",
@@ -90,7 +93,7 @@ load_config() {
     "delegation_timeout_sec": "12",
     "delegation_keywords": "plan,design,architecture,proposal,spec",
     "openrouter_model_fallback": "",
-    "model_fallback": "",
+    "deepseek_model_fallback": "",
     "llm_max_retries": "2",
     "llm_retry_backoff_ms": "500",
     "tool_allowlist": "",
@@ -125,10 +128,10 @@ DEFCONF
     val=$(jsonfilter -i "$CONFIG_FILE" -e '@.wifi_pass' 2>/dev/null) && [ -n "$val" ] && WIFI_PASS="$val"
     val=$(jsonfilter -i "$CONFIG_FILE" -e '@.tg_token' 2>/dev/null) && [ -n "$val" ] && TG_TOKEN="$val"
     val=$(jsonfilter -i "$CONFIG_FILE" -e '@.provider' 2>/dev/null) && [ -n "$val" ] && PROVIDER="$val"
-    val=$(jsonfilter -i "$CONFIG_FILE" -e '@.api_key' 2>/dev/null) && [ -n "$val" ] && API_KEY="$val"
-    val=$(jsonfilter -i "$CONFIG_FILE" -e '@.model' 2>/dev/null) && [ -n "$val" ] && MODEL="$val"
     val=$(jsonfilter -i "$CONFIG_FILE" -e '@.openrouter_key' 2>/dev/null) && [ -n "$val" ] && OPENROUTER_KEY="$val"
     val=$(jsonfilter -i "$CONFIG_FILE" -e '@.openrouter_model' 2>/dev/null) && [ -n "$val" ] && OPENROUTER_MODEL="$val"
+    val=$(jsonfilter -i "$CONFIG_FILE" -e '@.deepseek_key' 2>/dev/null) && [ -n "$val" ] && DEEPSEEK_KEY="$val"
+    val=$(jsonfilter -i "$CONFIG_FILE" -e '@.deepseek_model' 2>/dev/null) && [ -n "$val" ] && DEEPSEEK_MODEL="$val"
     val=$(jsonfilter -i "$CONFIG_FILE" -e '@.proxy_host' 2>/dev/null) && [ -n "$val" ] && PROXY_HOST="$val"
     val=$(jsonfilter -i "$CONFIG_FILE" -e '@.proxy_port' 2>/dev/null) && [ -n "$val" ] && PROXY_PORT="$val"
     val=$(jsonfilter -i "$CONFIG_FILE" -e '@.search_key' 2>/dev/null) && [ -n "$val" ] && SEARCH_KEY="$val"
@@ -150,8 +153,8 @@ DEFCONF
     val=$(jsonfilter -i "$CONFIG_FILE" -e '@.slack_webhook_token' 2>/dev/null) && [ -n "$val" ] && SLACK_WEBHOOK_TOKEN="$val"
     
     [ -z "$PROVIDER" ] && PROVIDER="openrouter"
-    [ -z "$MODEL" ] && MODEL="claude-opus-4-5"
-    [ -z "$OPENROUTER_MODEL" ] && OPENROUTER_MODEL="anthropic/claude-opus-4"
+    [ -z "$OPENROUTER_MODEL" ] && OPENROUTER_MODEL="nvidia/nemotron-3-ultra-550b-a55b:free"
+    [ -z "$DEEPSEEK_MODEL" ] && DEEPSEEK_MODEL="deepseek-v4-flash"
     [ -z "$HTTP_PORT" ] && HTTP_PORT="8080"
     
     # echo "[config] Provider: $PROVIDER" >&2
@@ -164,25 +167,24 @@ DEFCONF
         # echo "[config] OpenRouter: ${OPENROUTER_KEY:0:10}..." >&2
         :
     fi
-    if [ -n "$API_KEY" ]; then
-        # echo "[config] Anthropic: ${API_KEY:0:10}..." >&2
+    if [ -n "$DEEPSEEK_KEY" ]; then
         :
     fi
 }
 
 get_current_model() {
-    if [ "$PROVIDER" = "openrouter" ]; then
-        echo "$OPENROUTER_MODEL"
+    if [ "$PROVIDER" = "deepseek" ]; then
+        echo "$DEEPSEEK_MODEL"
     else
-        echo "$MODEL"
+        echo "$OPENROUTER_MODEL"
     fi
 }
 
 get_api_key() {
-    if [ "$PROVIDER" = "openrouter" ]; then
-        echo "$OPENROUTER_KEY"
+    if [ "$PROVIDER" = "deepseek" ]; then
+        echo "$DEEPSEEK_KEY"
     else
-        echo "$API_KEY"
+        echo "$OPENROUTER_KEY"
     fi
 }
 

@@ -1,5 +1,5 @@
 #!/bin/sh
-# MicroBot Plugin: Exchange Rate (Frankfurter API, no key)
+# AgentWRT Plugin: Exchange Rate (Frankfurter API, no key)
 # Provides: tool_get_exchange_rate
 # LLM decides from_currency, to_currency, amount from user question
 

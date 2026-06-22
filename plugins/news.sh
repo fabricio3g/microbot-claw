@@ -1,5 +1,5 @@
 #!/bin/sh
-# MicroBot Plugin: News Summary
+# AgentWRT Plugin: News Summary
 # Provides: tool_get_news
 
 tool_get_news() {
