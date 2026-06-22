@@ -2,304 +2,168 @@
 
 # AgentWRT
 
-AI-powered Telegram bot for OpenWrt routers. MicroPython implementation with Shell tool backends. REACT agent loop with tools, scheduling (including agent/planning), web crawl
+AI-powered Telegram bot that runs on your OpenWrt router. Think, schedule, crawl, and control your network — all from chat.
+
+- **Telegram bot** with a ReAct agent loop (Think → Act → Observe)
+- **20+ tools** backed by shell scripts: web search, file I/O, system info, weather, HTTP, cron scheduling, network status
+- **Web UI** on port 8080 for config, plugins, memory, and persona
+- **18 plugins**: news, exchange rates, Wikipedia, web crawl, deep search, Gmail, Notion, Home Assistant, hardware health, WiFi scan, DNS lookup, ping, disk usage, log tail, uptime, hacker news, world time, router capabilities
+- **Webhooks**: Slack and generic HTTP webhooks for external triggers
+- **Smart routing**: 3-tier (fast/balanced/deep) with automatic keyword detection
+- **Delegation**: in-process role delegation pipeline
 
 ## Prerequisites
 
-Connect to your router via SSH. The installer will handle dependencies, but you can install them manually if needed:
+Connect to your router via SSH. The installer handles dependencies, but you can install them manually if needed:
 
 ```bash
-# SSH into router
 ssh root@ROUTER_IP
 
-# Optional: install required packages manually
+# Optional: install packages manually
 opkg update
 opkg install curl micropython jsonfilter openssh-server
 ```
 
 ## Quick Start
 
-```bash
-# 1. Copy files to router (from your local machine)
-scp -r agentwrt-ash root@ROUTER_IP:/mnt/usb/agentwrt-ash   # or /root/agentwrt-ash
+One command on the router:
 
-# 2. SSH into router
+```bash
 ssh root@ROUTER_IP
+cd /mnt/usb/agentwrt-ash && chmod +x *.sh
 
-# 3. Run installer (uses current directory as install dir)
-cd /mnt/usb/agentwrt-ash
-chmod +x *.sh
+# All-in-one install with keys:
+TELEGRAM_TOKEN='123:abc' \
+PROVIDER='deepseek' \
+DEEPSEEK_KEY='sk-...' \
+UI_PASSWORD='change-me' \
 ./install.sh
-
-# 4. Open the web UI and set tg_token + LLM keys (restart bot needed)
-http://ROUTER_IP:8080
 ```
 
-The bot and UI start even without `tg_token` or LLM API keys. Set them in the Web UI; the bot will pick them up within ~15 seconds.
-
-## Running
-
-### Services (created by install.sh)
-
-The installer creates four procd services and writes full paths into init.d so they work at boot from any directory:
-
-| Service | Description |
-|---------|-------------|
-| agentwrt | Main Telegram bot (polling) |
-| agentwrt-ui | Web config UI (port 8080) |
-
-
+Or with OpenRouter:
 
 ```bash
-# Start / stop / restart
-/etc/init.d/agentwrt start
-/etc/init.d/agentwrt stop
-/etc/init.d/agentwrt restart
-
-/etc/init.d/agentwrt-ui start
-/etc/init.d/agentwrt-ui stop
-
-
-# Check status (if start shows nothing)
-/etc/init.d/agentwrt status
-/etc/init.d/agentwrt-ui status
-
-# Logs
-logread -f | grep agentwrt
+TELEGRAM_TOKEN='123:abc' \
+PROVIDER='openrouter' \
+OPENROUTER_KEY='sk-or-...' \
+UI_PASSWORD='change-me' \
+./install.sh
 ```
 
-### Manual (foreground)
+After install, open `http://ROUTER_IP:8080` to fine-tune. The bot starts automatically.
 
-```bash
-cd /mnt/usb/agentwrt-ash   # or your install dir
-export AGENTWRT_INSTALL_DIR=$(pwd)
-micropython agentwrt.py
-micropython ui_server.py
-```
+Get tokens: [@BotFather](https://t.me/BotFather) for Telegram · [OpenRouter](https://openrouter.ai/keys) · [DeepSeek](https://platform.deepseek.com/api_keys)
 
-### Stopping
+## What `install.sh` Does
 
-- Foreground: `Ctrl+C`
-- Services: `killall micropython` (stops all micropython processes) or use `/etc/init.d/agentwrt stop` etc.
+1. Installs dependencies: `curl`, `micropython`, `wget`, `jsonfilter`, `openssh-server`
+2. Creates data directories: `data/config/`, `data/memory/`, `data/sessions/`
+3. Generates `data/config.json` from defaults + any env vars passed
+4. Writes two procd services (`agentwrt`, `agentwrt-ui`) into `/etc/init.d/`
+5. Enables and starts both services
+
+Env vars accepted: `TELEGRAM_TOKEN`, `PROVIDER`, `OPENROUTER_KEY`, `DEEPSEEK_KEY`, `DEEPSEEK_MODEL`, `TIMEZONE`, `UI_PASSWORD`
 
 ## Configuration
 
-**Recommended:** Set everything in the Web UI (http://ROUTER_IP:8080). The UI writes to `data/config.json`. You can also edit that file directly.
+Only 3 things are required. Set them via env vars (above) or in `data/config.json`:
 
-Required for Telegram + LLM:
+| Key | Description |
+|-----|-------------|
+| `tg_token` | Telegram bot token |
+| `provider` | `openrouter` or `deepseek` |
+| `openrouter_key` / `deepseek_key` | API key for your provider |
 
-- **tg_token** – Telegram bot token from @BotFather
-- **openrouter_key** (or **deepseek_key** for DeepSeek) – LLM API key
+Everything else has sensible defaults. [Full config reference →](CONFIG.md)
 
-Optional:
+## Features
 
-- **provider** – `openrouter` or `deepseek`
-- **openrouter_model** / **deepseek_model** – model name
-- **enable_selector** – `true` for low-RAM fast tool selection
-- **selector_max_tokens** – cap for selector response
-- **crawl_allow_domains** – comma list for web_crawl
+### Tools (20+ built-in)
+`web_search`, `web_crawl`, `scrape_web`, `read_file`, `write_file`, `edit_file`, `list_dir`, `system_info`, `network_status`, `run_command`, `http_request`, `download_file`, `get_weather`, `list_services`, `restart_service`, `save_memory`, `get_current_time`, `set_timezone`, `set_schedule`, `list_schedules`, `remove_schedule`, `set_probe`
 
+### Plugins (18 modules in `plugins/`)
+`deep_search`, `disk_usage`, `dns_lookup`, `exchange`, `get_uptime`, `gmail`, `hacker_news`, `hardware` (health + WiFi), `hass` (Home Assistant), `log_tail`, `news`, `notion`, `ping_host`, `probe`, `router_capabilities`, `web_crawl`, `wifi_scan`, `wikipedia`, `world_time`
 
-Config file location: under install dir `data/config.json` (e.g. `/mnt/usb/agentwrt-ash/data/config.json`) or `/data/config.json` if using system data dir.
+Enable/disable from the Web UI at `/plugins`. Scaffold new ones with `./new_tool.sh`.
 
-## Web UI (Recommended)
+### Scheduling
+Natural language: *"every day at 9am"*, *"every 15 minutes"*, *"tomorrow at 14:00"*. Supports reminders, one-shot messages, shell commands, tool runs, probes (alert on condition), and full agent invocations (*"every morning summarize news and weather"*).
 
-After install, open:
+### Webhooks
+- **Slack**: `/webhook/slack?token=SLACK_WEBHOOK_TOKEN`
+- **Generic**: `/webhook/generic?token=WEBHOOK_TOKEN`
+
+### Smart Routing
+Messages auto-classified into 3 tiers by keyword + length:
+- **Fast** (256 tokens, temp 0.2) — simple queries
+- **Balanced** (512 tokens, temp 0.4) — typical requests
+- **Deep** (1024 tokens, temp 0.7) — complex, design, planning
+
+Configurable: `routing_enabled`, `routing_deep_keywords`, `routing_long_message_chars`, token/temp per tier.
+
+### Delegation
+In-process role delegation for complex tasks. Configurable: `delegation_enabled`, `delegation_max_calls`, `delegation_keywords`.
+
+## Running
+
+```bash
+/etc/init.d/agentwrt start|stop|restart|status
+/etc/init.d/agentwrt-ui start|stop|restart|status
+
+# Logs
+logread -f | grep agentwrt
+
+# Test setup
+./test.sh
+```
+
+## Project Structure
 
 ```
-http://ROUTER_IP:8080
+agentwrt-ash/
+├── agentwrt.py           # Main bot (MicroPython, ~3700 lines)
+├── ui_server.py          # Web config UI (port 8080)
+├── config.sh             # Config loader (jsonfilter-based)
+├── tools.sh              # 20+ shell tool backends
+├── skills.sh             # Skill loader
+├── install.sh            # Installer
+├── uninstall.sh          # Uninstaller
+├── test.sh               # Self-test
+├── new_tool.sh           # Plugin scaffolder
+├── cron_dispatch.sh      # Cron job dispatcher
+├── skills.md             # Full tools/skills reference
+├── INSTALL.md            # Detailed install guide
+├── core/
+│   ├── __init__.py
+│   ├── telegram.py       # Telegram bot module
+│   └── util.py           # Utilities
+├── plugins/              # 18 plugin pairs (*.json + *.sh)
+│   ├── _template.json    # Scaffold templates
+│   ├── _template.sh
+│   └── ...
+├── data/                 # Runtime data (created by install.sh)
+│   ├── config.json
+│   ├── config/
+│   ├── memory/
+│   ├── sessions/
+│   └── schedules.txt
+└── test/
+    └── test_compatibility.py
 ```
-
-- Set **tg_token** and **LLM keys** (openrouter_key or deepseek_key); the bot picks them up without restart.
-- Set a UI password on first visit (stored as salted hash: `ui_pass_salt` + `ui_pass_hash`).
-- Use **Restart Bot** to restart the agentwrt service.
-- Use `/plugins` to enable/disable plugins; `/memory`, `/personality`, `/skills`, `/skills_usage` for memory, persona, and skills.
-- Webhooks: `/webhook/generic?token=WEBHOOK_TOKEN`, `/webhook/slack?token=SLACK_WEBHOOK_TOKEN`.
 
 ## Uninstall
 
-From your install directory:
-
 ```bash
-cd /mnt/usb/agentwrt-ash   # or your install dir
-./uninstall.sh
+cd /mnt/usb/agentwrt-ash && ./uninstall.sh
+# Keep your data:
+./uninstall.sh --keep-data
 ```
-
-Keep data: `./uninstall.sh --keep-data`
-
-## Get API Keys
-
-- **Telegram**: @BotFather on Telegram → `/newbot`
-- **OpenRouter**: https://openrouter.ai/keys (works with Claude, GPT-4, Gemini, Llama)
-- **DeepSeek**: https://platform.deepseek.com/api_keys
-
-## Bot Commands
-
-| Command | Description |
-|---------|-------------|
-| `/start` | Start conversation |
-| `/clear` | Clear history |
-
-## Available Tools
-
-See **skills.md** for the full reference. Summary:
-
-**Core:** `get_current_time`, `web_search`, `scrape_web`, `read_file` / `write_file` / `edit_file` / `list_dir`, `system_info`, `network_status`, `run_command`, `get_weather`, `http_request`, `download_file`,  `list_services` / `restart_service`, `set_schedule` / `list_schedules` / `remove_schedule`, `save_memory`, `set_probe`, `set_timezone`.
-
-**Plugins (plugins/*.json + *.sh):** e.g. `web_crawl`, `deep_search`, `get_news`, `get_exchange_rate`, `wikipedia_summary`, `hacker_news_top`, `ping_host`, `disk_usage`, `get_uptime`, `log_tail`, `dns_lookup`, `wifi_scan`, `get_sys_health`, etc.
-
-## Example Queries
-
-- "What's the system status?" / "Show me connected network devices"
-- "Run `logread | tail -20`" / "What's the weather in Tokyo?"
-- "Restart the firewall" / "Write a note to /data/notes.txt"
-- "Search for latest OpenWrt news" / "When does River play?"
-- "Remind me every day at 9am to check logs"
-- "Every day at 8am run the agent: Summarize overnight news and weather for Buenos Aires"
-- "Save that I prefer dark mode"
-
-## Scheduling
-
-**Natural language:** "every day at 9am", "every weekday at 18:30", "every 15 minutes", "tomorrow at 9am", "in 30 minutes", "at 14:00". Or use 5-field cron.
-
-**Schedule types (set_schedule `type`):**
-
-| Type | Description |
-|------|-------------|
-| `reminder` / `msg` | Recurring message |
-| `once` | One-time message |
-| `cmd` | Run shell command each time |
-| `tool` | Run one tool each time (content: `tool_name args` or `tool_name|json`) |
-| `once_tool` | Run tool once, then remove schedule |
-| `probe` | Run check (e.g. `net_check`), alert only if non-empty |
-| **`agent`** | At schedule time, run the full agent with content as the user prompt (agent can use tools and plan) |
-| **`once_agent`** | Same as agent but remove after firing |
-
-Examples:
-
-- "Remind me every day at 9am" → type `reminder`, content = message.
-- "Every day at 8am run the agent: Summarize overnight news and weather" → type `agent`, content = that prompt.
-- "Every hour run net_check and alert if down" → type `probe`, content = `net_check`.
-
-
-## Architecture
-
-```
-agentwrt.py (Python)
-    │
-    ├── LLMClient ────► OpenRouter / Anthropic API
-    │
-    ├── Agent (ReAct Loop)
-    │   ├── Think  → Send to LLM
-    │   ├── Act    → Detect & execute tool
-    │   └── Observe → Feed result back
-    │
-    └── Tools ────────► Shell scripts (tools.sh)
-                         │
-                         ├── tool_web_search
-                         ├── tool_system_info
-                         ├── tool_run_command
-                         └── ... (20+ tools)
-```
-
-## Files
-
-```
-<install_dir>/  (e.g. /mnt/usb/agentwrt-ash or /root/agentwrt-ash)
-├── agentwrt.py        # Main bot (MicroPython)
-├── ui_server.py       # Web UI
-├── config.sh          # Config loader
-├── tools.sh           # Tool functions (shell)
-├── skills.sh          # Skill loader
-├── install.sh         # Installer (creates init.d with full paths)
-├── uninstall.sh       # Uninstaller
-├── test.sh            # Test script
-├── new_tool.sh        # Tool scaffolder
-├── skills.md          # Full tools/skills reference
-└── plugins/           # Plugin modules (*.json + *.sh)
-    ├── web_crawl.sh, web_crawl.json
-    ├── exchange.sh, exchange.json
-    └── ...
-
-<install_dir>/data/  (or /data/ if using system data)
-├── config.json       # Configuration (editable via UI)
-├── memory/           # Long-term memory (MEMORY.md, summaries)
-├── config/           # Personality (SOUL.md, USER.md)
-├── sessions/         # Chat history
-├── uploads/          # User-uploaded files per chat (photos, docs, etc.)
-│   └── <chat_id>/
-│       ├── photo/
-│       ├── documents/
-│       └── ...
-└── schedules.txt     # Scheduled tasks (cron|type|content)
-```
-
-Init scripts are written by `install.sh` into `/etc/init.d/agentwrt`, `agentwrt-ui`,  with full paths so they work at boot.
 
 ## Requirements
 
 - OpenWrt 21.02+
-- **curl** - `opkg install curl`
-- **micropython** - `opkg install micropython`
-- wget (built-in)
-- jsonfilter (built-in)
-
-## Config Options
-
-- `wifi_reset_enable`: `"true"`/`"false"` to allow WiFi radio reset on connectivity loss.
-- `wifi_reset_radio`: radio to reset (e.g., `radio0`).
-- `schedule_catchup_minutes`: how many minutes to catch up missed schedules (default `5`).
-- `schedule_log`: `"true"`/`"false"` to log scheduler activity to `/data/logs/scheduler.log`.
-- `allow_llm_summary`: `"true"`/`"false"` to enable LLM-based history summaries.
-- `openrouter_model_fallback`: fallback model for OpenRouter on errors.
-- `model_fallback`: fallback model for Anthropic on errors.
-- `llm_max_retries`: retry count per model.
-- `llm_retry_backoff_ms`: backoff between retries.
-- `tool_allowlist`: comma list of allowed tool names (empty = allow all).
-- `tool_rate_limit_per_min`: max tool calls per minute.
-- `tool_rate_limit_burst`: burst allowance for tool calls.
-- `enabled_plugins`: list of enabled plugin IDs (plugin filenames without `.sh`/`.json`, empty = all enabled).
-- `crawl_allow_domains`: optional comma list of allowed crawl domains.
-- `inbox_check_interval`: seconds between inbox checks for webhooks.
-- `routing_enabled`: `"true"`/`"false"` to enable smart routing tiers.
-- `routing_long_message_chars`: length threshold for deep tier.
-- `routing_deep_keywords`: comma list of deep-tier keywords.
-- `routing_fast_tokens`, `routing_balanced_tokens`, `routing_deep_tokens`: max token budgets per tier.
-- `routing_fast_temp`, `routing_balanced_temp`, `routing_deep_temp`: temperature per tier.
-- `delegation_enabled`: `"true"`/`"false"` to enable in-process delegation.
-- `delegation_max_calls`: max role calls (1-3).
-- `delegation_max_tokens_per_call`: token cap per role call.
-- `delegation_timeout_sec`: soft timeout for delegation pipeline.
-- `delegation_keywords`: comma list of delegation trigger keywords.
-
-## Troubleshooting
-
-```bash
-# Test setup
-./test.sh
-
-# Check service status (if start shows nothing)
-/etc/init.d/agentwrt status
-/etc/init.d/agentwrt-ui status
-
-# Scheduler: use list_schedules tool; optional log: schedule_log=true, /data/logs/scheduler.log
-
-# Test Telegram API
-curl -k -s "https://api.telegram.org/botYOUR_TOKEN/getMe"
-
-# Run manually for debugging (from install dir)
-cd /mnt/usb/agentwrt-ash && AGENTWRT_INSTALL_DIR=$(pwd) micropython agentwrt.py
-cd /mnt/usb/agentwrt-ash && AGENTWRT_INSTALL_DIR=$(pwd) micropython ui_server.py
-```
+- `curl`, `micropython`, `wget`, `jsonfilter` (installed automatically by `install.sh`)
 
 ## License
 
 MIT
-
-## Tool Scaffolder
-
-Create a new plugin quickly:
-
-```bash
-./new_tool.sh
-```
