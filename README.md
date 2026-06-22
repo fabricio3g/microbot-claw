@@ -1,3 +1,5 @@
+<p align="center"><img src="logo.svg" alt="AgentWRT" width="400"></p>
+
 # AgentWRT
 
 AI-powered Telegram bot for OpenWrt routers. MicroPython implementation with Shell tool backends. REACT agent loop with tools, scheduling (including agent/planning), web crawl
